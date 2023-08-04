@@ -22,9 +22,9 @@ class User:
 
 
 class Environment:
-    def __init__(self, goal):
+    def __init__(self):
         self.position = 0
-        self.goal = goal
+        self.goal = -1 + np.random.rand() * 2
 
     def step(self, action):
         self.position += action / 10
@@ -47,6 +47,27 @@ class Environment:
 
     def reset(self):
         self.position = 0
+        self.goal = -1 + np.random.rand() * 2
+
+
+class GaussianPolicy(nn.Module):
+    def __init__(self, input_dim, output_dim):
+        super(GaussianPolicy, self).__init__()
+        self.mu_head = torch.nn.Sequential(
+            nn.Linear(input_dim, output_dim, bias=False),
+        )
+        self.log_std_head = nn.Linear(input_dim, output_dim, bias=True)
+
+    def forward(self, state):
+        x = state
+        mu = self.mu_head(x)
+
+        # Since we have only one learnable parameter let the bias control the variance level
+        log_std = self.log_std_head(torch.zeros_like(state))
+
+        # usually, you need to limit the values of log_std
+        log_std = torch.clamp(log_std, min=-20, max=2)
+        return mu, log_std
 
 
 class GaussianPolicy(nn.Module):
@@ -73,7 +94,7 @@ class Controller(nn.Module):
     def __init__(self):
         super(Controller, self).__init__()
         self.policy = GaussianPolicy(1, 1)
-        self.optimizer = optim.Adam(self.parameters(), lr=3e-4)
+        self.optimizer = optim.Adam(self.parameters(), lr=3e-1)
 
     def forward(self, x, explore):
         mu, log_std = self.policy(x)
@@ -148,6 +169,7 @@ def rollout(user, environment, controller, screen, clock, max_steps, explore=Tru
 
     dt = 0
     running = True
+    pygame.mouse.set_pos((249,0))
 
     for t in range(max_steps):
         for event in pygame.event.get():
@@ -158,7 +180,7 @@ def rollout(user, environment, controller, screen, clock, max_steps, explore=Tru
                     running = False
 
         state = environment.get_state()
-        user_signal = user.get_signal(state)
+        user_signal = user.get_signal()
 
         action = controller(user_signal, explore)
         # In SL we have a tanh activation which naturally clips the actions, in RL we have a gaussian distribution
@@ -233,44 +255,50 @@ def main():
     clock = pygame.time.Clock()
 
     user = User(goal=1, middle_pixel=(WIDTH - 1) / 2)
-    environment = Environment(goal=np.random.rand())
+    environment = Environment()
     controller = Controller()
 
-    steps = 5
+    steps = 100
     epochs = 100_000 // steps
 
     initial_parameters = controller.state_dict()
 
-    rl_losses, rl_reward_history, mus, stds = train_rl(environment, controller, user, steps, epochs)
-    controller.load_state_dict(initial_parameters)
-    sl_losses, sl_reward_history = train_sl(environment, controller, user, steps, epochs // 2)
+    # rl_losses, rl_reward_history, mus, stds = train_rl(environment, controller, user, steps, epochs)
+    # controller.load_state_dict(initial_parameters)
+    sl_losses, sl_reward_history = train_sl(environment,
+                                            controller,
+                                            user,
+                                            screen,
+                                            clock,
+                                            steps,
+                                            5)#epochs // 2)
 
-    plt.title("mus")
-    plt.plot(mus)
-    plt.show()
-    plt.title("stds")
-    stds = np.array(stds)
-    plt.plot(stds[:, 0], label="weight")
-    plt.plot(stds[:, 1], label="bias")
-    plt.legend()
-    plt.show()
+    # plt.title("mus")
+    # plt.plot(mus)
+    # plt.show()
+    # plt.title("stds")
+    # stds = np.array(stds)
+    # plt.plot(stds[:, 0], label="weight")
+    # plt.plot(stds[:, 1], label="bias")
+    # plt.legend()
+    # plt.show()
 
-    plt.title("RL rewards")
-    plt.plot(rl_reward_history, label='RL')
-    plt.show()
-    plt.title("SL rewards")
-    plt.plot(sl_reward_history, label='SL Reward')
-    plt.show()
+    # plt.title("RL rewards")
+    # plt.plot(rl_reward_history, label='RL')
+    # plt.show()
+    # plt.title("SL rewards")
+    # plt.plot(sl_reward_history, label='SL Reward')
+    # plt.show()
 
-    plt.title("RL losses")
-    plt.plot(rl_losses, label='RL Loss')
-    plt.show()
-    plt.title("SL losses")
-    plt.plot(sl_losses, label='SL Loss')
-    plt.legend()
-    plt.show()
+    # plt.title("RL losses")
+    # plt.plot(rl_losses, label='RL Loss')
+    # plt.show()
+    # plt.title("SL losses")
+    # plt.plot(sl_losses, label='SL Loss')
+    # plt.legend()
+    # plt.show()
 
-    print("done")
+    # print("done")
     pygame.quit()
 
 def train_rl(environment, controller: Controller, user, steps, epochs):
@@ -291,12 +319,12 @@ def train_rl(environment, controller: Controller, user, steps, epochs):
     return rl_losses, rl_reward_history, mus, stds
 
 
-def train_sl(environment, controller, user, steps, epochs):
+def train_sl(environment, controller, user, screen, clock, steps, epochs):
     sl_reward_history = []
     sl_losses = []
     for _epoch in tqdm.trange(epochs):
         states, actions, optimal_actions, rewards = rollout(
-            user, environment, controller, max_steps=steps, explore=False)
+            user, environment, controller, screen, clock, max_steps=steps, explore=False)
         loss = controller.sl_update(states, optimal_actions)
 
         sl_reward_history.append(sum(rewards).item())
