@@ -21,9 +21,9 @@ class User:
 
 
 class Environment:
-    def __init__(self, goal):
+    def __init__(self):
         self.position = 0
-        self.goal = goal
+        self.goal = -1 + np.random.rand() * 2
 
     def step(self, action):
         self.position += action / 10
@@ -44,6 +44,7 @@ class Environment:
 
     def reset(self):
         self.position = 0
+        self.goal = -1 + np.random.rand() * 2
 
 
 class Controller(nn.Module):
@@ -51,7 +52,7 @@ class Controller(nn.Module):
         super(Controller, self).__init__()
         self.fc = nn.Linear(1, 1)
         self.loss_function = nn.MSELoss()
-        self.optimizer = optim.Adam(self.parameters(), lr=0.01)
+        self.optimizer = optim.Adam(self.parameters(), lr=0.5)
 
     def forward(self, x):
         return self.fc(x)
@@ -89,6 +90,7 @@ def rollout(user, environment, controller, screen, clock, max_steps):
 
     dt = 0
     running = True
+    pygame.mouse.set_pos((249,0))
 
     for t in range(max_steps):
         for event in pygame.event.get():
@@ -158,20 +160,21 @@ def main():
     clock = pygame.time.Clock()
 
     user = User(goal=1, middle_pixel=(WIDTH - 1) / 2)
-    environment = Environment(goal=np.random.rand())
+    environment = Environment()
     controller = Controller()
 
     controller.fc.weight.data = -torch.abs(controller.fc.weight.data)
     controller.fc.bias.data = torch.zeros_like(controller.fc.bias.data)
     reward_history = []
 
-    for _ in tqdm.trange(2):
+    for _ in tqdm.trange(10):
         states, actions, optimal_actions, rewards = rollout(user,
                                                             environment,
                                                             controller,
                                                             screen,
                                                             clock,
-                                                            max_steps=10000)
+                                                            max_steps=100)
+
         reward_history.append(sum(rewards).numpy()[0])
         controller.train_sl(states, optimal_actions)
 
