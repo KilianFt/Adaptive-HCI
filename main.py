@@ -1,17 +1,22 @@
+import pickle
+
+import numpy as np
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import tqdm
-
+import pygame
 
 class User:
-    def __init__(self, goal):
+    def __init__(self, goal, middle_pixel):
         self.goal = goal
+        self.middle = middle_pixel
 
-    def get_signal(self, current_position):
-        signal = self.goal - current_position
+    def get_signal(self):
+        signal = (pygame.mouse.get_pos()[0] - self.middle) / self.middle
+        signal = max(min(signal, 1.), -1.)
         signal = torch.tensor([signal], dtype=torch.float32)
         return signal
 
@@ -22,7 +27,8 @@ class Environment:
         self.goal = goal
 
     def step(self, action):
-        self.position += action
+        self.position += action / 10
+        self.position = max(min(self.position, 1.), -1.)
         position = torch.tensor(self.position, dtype=torch.float32)
         distance_from_goal = torch.abs(position - self.goal)
         done = self.is_done()
@@ -31,10 +37,13 @@ class Environment:
         return self.get_state(), reward, done
 
     def is_done(self):
-        return self.position == self.goal
+        return abs(self.position - self.goal) < 0.01
 
     def get_state(self):
         return self.position
+
+    def get_goal(self):
+        return self.goal
 
     def reset(self):
         self.position = 0
@@ -126,13 +135,28 @@ class Controller(nn.Module):
         return loss.item()
 
 
-def rollout(user, environment, controller, max_steps, explore=True):
+def norm_pos_to_pixel(norm_position):
+    return 249 * (norm_position + 1)
+
+
+def rollout(user, environment, controller, screen, clock, max_steps, explore=True):
     environment.reset()
     states = []
     actions = []
     optimal_actions = []
     rewards = []
+
+    dt = 0
+    running = True
+
     for t in range(max_steps):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            if event.type == pygame.KEYDOWN:
+                if event.unicode == 'q':
+                    running = False
+
         state = environment.get_state()
         user_signal = user.get_signal(state)
 
@@ -144,13 +168,54 @@ def rollout(user, environment, controller, max_steps, explore=True):
         action_clip = torch.clamp(action, -1, 1)
         new_state, reward, done = environment.step(action_clip.item())
 
+        screen.fill((0,0,0))
+        line_y = (screen.get_height() / 2)
+        pygame.draw.line(screen,
+                        color=(255,255,255),
+                        start_pos=(0, line_y),
+                        end_pos=(screen.get_width(), line_y),
+                        width=5)
+
+        pygame.draw.circle(surface=screen,
+                        color=(255,255,255),
+                        center=(norm_pos_to_pixel(new_state), line_y),
+                        radius=8)
+
+        pygame.draw.circle(surface=screen,
+                        color=(0,255,0),
+                        center=(norm_pos_to_pixel(environment.get_goal()), line_y),
+                        radius=8)
+
+        screen.fill((0,0,0))
+        line_y = (screen.get_height() / 2)
+        pygame.draw.line(screen,
+                        color=(255,255,255),
+                        start_pos=(0, line_y),
+                        end_pos=(screen.get_width(), line_y),
+                        width=5)
+
+        pygame.draw.circle(surface=screen,
+                        color=(255,255,255),
+                        center=(norm_pos_to_pixel(new_state), line_y),
+                        radius=8)
+
+        pygame.draw.circle(surface=screen,
+                        color=(0,255,0),
+                        center=(norm_pos_to_pixel(environment.get_goal()), line_y),
+                        radius=8)
+
         states.append(user_signal)
         actions.append(action_clip)
         optimal_actions.append(torch.tensor([environment.goal - state], dtype=torch.float32))
         rewards.append(reward)
 
-        if done:
+        if done or not running:
+            running = False
             break
+
+        pygame.display.flip()
+        dt = clock.tick(10) / 1000
+
 
     states = torch.stack(states)
     actions = torch.stack(actions)
@@ -160,8 +225,15 @@ def rollout(user, environment, controller, max_steps, explore=True):
 
 
 def main():
-    user = User(goal=1)
-    environment = Environment(goal=1)
+    WIDTH = 500
+    HEIGHT = 100
+
+    pygame.init()
+    screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    clock = pygame.time.Clock()
+
+    user = User(goal=1, middle_pixel=(WIDTH - 1) / 2)
+    environment = Environment(goal=np.random.rand())
     controller = Controller()
 
     steps = 5
@@ -199,7 +271,7 @@ def main():
     plt.show()
 
     print("done")
-
+    pygame.quit()
 
 def train_rl(environment, controller: Controller, user, steps, epochs):
     rl_reward_history = []
