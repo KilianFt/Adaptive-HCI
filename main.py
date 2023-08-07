@@ -165,7 +165,7 @@ def main():
     controller = Controller()
 
     steps = 5
-    epochs = 50_000 // steps
+    epochs = 100_000 // steps
 
     initial_parameters = controller.state_dict()
 
@@ -208,7 +208,7 @@ def train_rl(environment, controller: Controller, user, steps, epochs):
     stds = []
     for epoch in tqdm.trange(epochs):
         states, actions, optimal_actions, rewards = rollout(user, environment, controller, max_steps=steps)
-        loss = controller.rl_update(actions, states, rewards)
+        loss = controller.rl_update(states, actions, rewards)
         rl_reward_history.append(sum(rewards).item())
         rl_losses.append(loss)
         mus.append(controller.policy.mu_head[0].weight.item())
