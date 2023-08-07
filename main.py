@@ -1,9 +1,10 @@
+import gym
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.optim as optim
 import tqdm
+from stable_baselines3 import PPO
 
 
 class User:
@@ -16,10 +17,14 @@ class User:
         return signal
 
 
-class Environment:
-    def __init__(self, goal):
-        self.position = 0
+class Environment(gym.Env):
+    def __init__(self, user, goal):
         self.goal = goal
+        self.user = user
+        self.position = None
+        self.current_steps = None
+        self.max_steps = 100
+        self.reset
 
     def step(self, action):
         self.position += action
@@ -28,42 +33,39 @@ class Environment:
         done = self.is_done()
         reward = -distance_from_goal
         reward = torch.clamp(reward, -1, 1)
-        return self.get_state(), reward, done
+        return self.get_state(), float(reward), done, {}
 
     def is_done(self):
-        return self.position == self.goal
+        return np.abs(self.position - self.goal) < 1 or self.current_steps >= self.max_steps
 
     def get_state(self):
-        return self.position
+        return self.user.get_signal(self.position)
 
-    def reset(self):
-        self.position = 0
+    def reset(self, **kwargs):
+        super(Environment, self).reset(**kwargs)
+        self.position = np.random.randint(-10, 10)
+        self.current_steps = 0
+        return self.get_state()
 
+    @property
+    def observation_space(self):
+        return gym.spaces.Box(low=-10, high=10, shape=(1,))
 
-class GaussianPolicy(nn.Module):
-    def __init__(self, input_dim, output_dim):
-        super(GaussianPolicy, self).__init__()
-        self.mu_head = torch.nn.Sequential(
-            nn.Linear(input_dim, output_dim, bias=False),
-        )
-        self.log_std_head = nn.Linear(input_dim, output_dim, bias=True)
-
-    def forward(self, state):
-        x = state
-        mu = self.mu_head(x)
-
-        # Since we have only one learnable parameter let the bias control the variance level
-        log_std = self.log_std_head(torch.zeros_like(state))
-
-        # usually, you need to limit the values of log_std
-        log_std = torch.clamp(log_std, min=-20, max=2)
-        return mu, log_std
+    @property
+    def action_space(self):
+        return gym.spaces.Box(low=-1, high=1, shape=(1,))
 
 
 class CategoricalPolicy(nn.Module):
     def __init__(self, input_dim, num_classes):
         super(CategoricalPolicy, self).__init__()
-        self.action_head = torch.nn.Linear(input_dim, num_classes)
+        self.action_head = torch.nn.Sequential(
+            torch.nn.Linear(input_dim, 32),
+            torch.nn.ReLU(),
+            torch.nn.Linear(32, 32),
+            torch.nn.ReLU(),
+            torch.nn.Linear(32, num_classes),
+        )
 
     def forward(self, state):
         x = state
@@ -71,25 +73,29 @@ class CategoricalPolicy(nn.Module):
         return action_logits
 
 
-class Controller(nn.Module):
-    def __init__(self):
-        super(Controller, self).__init__()
-        self.policy = CategoricalPolicy(input_dim=1, num_classes=2)
-        self.optimizer = optim.Adam(self.parameters(), lr=3e-4)
-        self.action_map = torch.tensor((-1, 1))
+class Controller(PPO):
+    def __init__(self, env):
+        super(Controller, self).__init__(
+            "MlpPolicy",
+            env,
+            n_steps=50,
+            verbose=1,
+            tensorboard_log="tmp/a2c_cartpole_tensorboard/",
+        )
+        magnitude = 1.0
 
-    def forward(self, x, explore):
-        action_logits = self.policy(x)
-        if explore:
-            action_idx = torch.distributions.Categorical(logits=action_logits).sample()
-        else:
-            action_idx = torch.argmax(action_logits)
-        action_direction = self.action_map[action_idx]
-        return action_direction
+        self.index_to_action = np.array([
+            -magnitude,
+            # -magnitude / 2,
+            # magnitude / 2,
+            magnitude])
+        self.action_to_index = {action: index for index, action in enumerate(self.index_to_action)}
+        # self.policy = CategoricalPolicy(input_dim=1, num_classes=len(self.index_to_action))
+        # self.optimizer = optim.Adam(self.parameters(), lr=3e-4)
 
     def deterministic_forward(self, x):
-        mu, _ = self.policy(x)
-        return mu
+        dist = self.policy.get_distribution(x)
+        return dist.distribution.mean
 
     def rl_update(self, states, actions, rewards):
         """
@@ -110,124 +116,116 @@ class Controller(nn.Module):
 
         action_logits = self.policy(states)
 
-        # Compute the policy loss
-        loss = -(action_logits * rewards).mean()
+        # Compute the log probabilities of the actions
+        log_probabilities = torch.nn.functional.log_softmax(action_logits, dim=1)
+
+        # Select the log probabilities of the actions that were actually taken
+        log_probabilities = log_probabilities[range(len(actions)), actions]
+
+        # Compute the loss
+        advantage = rewards.squeeze(1) - torch.mean(rewards, dim=1)
+        loss = -torch.einsum("i,i->", advantage, log_probabilities)
 
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.policy.parameters(), max_norm=1)
         self.optimizer.step()
+
         return loss.item()
 
     def sl_update(self, states, optimal_actions):
-        self.train()
-        self.optimizer.zero_grad()
-        predicted_actions = self.deterministic_forward(states)
-        reachable_optimal_action = torch.clamp(optimal_actions, -1, 1)
-        loss = torch.nn.functional.mse_loss(predicted_actions, reachable_optimal_action)
+        self.policy.train()
+        self.policy.optimizer.zero_grad()
+        predicted_action = self.deterministic_forward(states)
+        # target_action = torch.argmin(torch.abs(optimal_actions - self.index_to_action), dim=1)
+        target_action = torch.clip(optimal_actions, -1, 1)
+
+        loss = torch.nn.functional.mse_loss(predicted_action, target_action)
         loss.backward()
-        self.optimizer.step()
+        self.policy.optimizer.step()
         return loss.item()
 
 
 def rollout(user, environment, controller, max_steps, explore=True):
-    environment.reset()
+    s0 = environment.reset()
     states = []
-    actions = []
+    action_means = []
     optimal_actions = []
     rewards = []
+    t = 0
     for t in range(max_steps):
         state = environment.get_state()
         user_signal = user.get_signal(state)
 
-        action = controller(user_signal, explore)
-        new_state, reward, done = environment.step(action.item())
+        action_mean = controller.deterministic_forward(user_signal.unsqueeze(0))
+        new_state, reward, done, info = environment.step(action_mean.detach().item())
 
         states.append(user_signal)
-        actions.append(action)
-        optimal_actions.append(torch.tensor([environment.goal - state], dtype=torch.float32))
+        action_means.append(action_mean)
+        optimal_actions.append(torch.tensor([state - environment.goal], dtype=torch.float32))
         rewards.append(reward)
 
         if done:
             break
 
     states = torch.stack(states)
-    actions = torch.stack(actions)
+    action_means = torch.stack(action_means)
     optimal_actions = torch.stack(optimal_actions)
-    rewards = torch.stack(rewards).unsqueeze(-1)
-    return states, actions, optimal_actions, rewards
+    rewards = torch.tensor(rewards).unsqueeze(-1)
+    time_to_goal = t
+    return states, action_means, optimal_actions, rewards, time_to_goal
 
 
 def main():
     user = User(goal=1)
-    environment = Environment(goal=1)
-    controller = Controller()
+    environment = Environment(user=user, goal=1)
+    controller = Controller(env=environment)
 
-    steps = 5
-    epochs = 500_000 // steps
+    steps = 50
+    total_timesteps = 10_000
+    initial_parameters = controller.policy.state_dict()
+    learner = controller.learn(total_timesteps=total_timesteps)
+    learner.logger.dump()
 
-    initial_parameters = controller.state_dict()
+    controller.policy.load_state_dict(initial_parameters)
 
-    rl_losses, rl_reward_history, mus, stds = train_rl(environment, controller, user, steps, epochs)
-    controller.load_state_dict(initial_parameters)
-    sl_losses, sl_reward_history = train_sl(environment, controller, user, steps, epochs // 10)
+    sl_losses, sl_reward_history, sl_avg_steps = train_sl(environment, controller, user, steps, total_timesteps)
 
-    plt.title("mus")
-    plt.plot(mus)
-    plt.show()
-    plt.title("stds")
-    stds = np.array(stds)
-    plt.plot(stds[:, 0], label="weight")
-    plt.plot(stds[:, 1], label="bias")
-    plt.legend()
-    plt.show()
-
-    plt.title("RL rewards")
-    plt.plot(rl_reward_history, label='RL')
-    plt.show()
-    plt.title("SL rewards")
-    plt.plot(sl_reward_history, label='SL Reward')
-    plt.show()
-
-    plt.title("RL losses")
-    plt.plot(rl_losses, label='RL Loss')
-    plt.show()
-    plt.title("SL losses")
-    plt.plot(sl_losses, label='SL Loss')
-    plt.legend()
-    plt.show()
+    plot_and_mean(sl_avg_steps, "SL avg steps")
+    plot_and_mean(sl_reward_history, "SL rewards")
+    plot_and_mean(sl_losses, "SL losses")
 
     print("done")
 
 
-def train_rl(environment, controller: Controller, user, steps, epochs):
-    rl_reward_history = []
-    rl_losses = []
-    mus = []
-    stds = []
-    for epoch in tqdm.trange(epochs):
-        states, actions, optimal_actions, rewards = rollout(user, environment, controller, max_steps=steps)
-        loss = controller.rl_update(states, actions,  rewards)
-        rl_reward_history.append(sum(rewards).item())
-        rl_losses.append(loss)
-        mus.append(controller.policy.mu_head[0].weight.item())
-        stds.append((
-            controller.policy.log_std_head.weight.item(),
-            controller.policy.log_std_head.bias.item()
-        ))
-    return rl_losses, rl_reward_history, mus, stds
+def plot_and_mean(rl_reward_history, title):
+    if not rl_reward_history:
+        return
+
+    plt.title(title)
+    plt.plot(rl_reward_history)  # , label=title)
+    smoothed_rl_reward_history = np.convolve(rl_reward_history, np.ones(100) / 100, mode='valid')
+    plt.plot(smoothed_rl_reward_history)  # , label=f"{title} smoothed")
+    plt.legend()
+    plt.show()
+
+
+def train_rl(controller: Controller, epochs):
+    return controller.learn(epochs)
 
 
 def train_sl(environment, controller, user, steps, epochs):
     sl_reward_history = []
     sl_losses = []
+    performances = []
+
     for _epoch in tqdm.trange(epochs):
-        states, actions, optimal_actions, rewards = rollout(
+        states, actions, optimal_actions, rewards, performance = rollout(
             user, environment, controller, max_steps=steps, explore=False)
         loss = controller.sl_update(states, optimal_actions)
 
-        sl_reward_history.append(sum(rewards).item())
+        sl_reward_history.append(torch.mean(rewards))
+        performances.append(performance)
         sl_losses.append(loss)
-    return sl_losses, sl_reward_history
+    return sl_losses, sl_reward_history, performances
 
 
 if __name__ == '__main__':
