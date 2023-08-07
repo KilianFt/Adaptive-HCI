@@ -60,21 +60,32 @@ class GaussianPolicy(nn.Module):
         return mu, log_std
 
 
+class CategoricalPolicy(nn.Module):
+    def __init__(self, input_dim, num_classes):
+        super(CategoricalPolicy, self).__init__()
+        self.action_head = torch.nn.Linear(input_dim, num_classes)
+
+    def forward(self, state):
+        x = state
+        action_logits = self.action_head(x)
+        return action_logits
+
+
 class Controller(nn.Module):
     def __init__(self):
         super(Controller, self).__init__()
-        self.policy = GaussianPolicy(1, 1)
+        self.policy = CategoricalPolicy(input_dim=1, num_classes=2)
         self.optimizer = optim.Adam(self.parameters(), lr=3e-4)
+        self.action_map = torch.tensor((-1, 1))
 
     def forward(self, x, explore):
-        mu, log_std = self.policy(x)
-        std = torch.exp(log_std)
+        action_logits = self.policy(x)
         if explore:
-            normal = torch.distributions.Normal(mu, std)
-            action = normal.sample()
+            action_idx = torch.distributions.Categorical(logits=action_logits).sample()
         else:
-            action = mu
-        return action
+            action_idx = torch.argmax(action_logits)
+        action_direction = self.action_map[action_idx]
+        return action_direction
 
     def deterministic_forward(self, x):
         mu, _ = self.policy(x)
@@ -97,18 +108,10 @@ class Controller(nn.Module):
             self.train()
         self.optimizer.zero_grad()
 
-        # Let's assume that the model predicts mean and log_std of a Gaussian distribution
-        mean, log_std = self.policy(states)
-        std = torch.exp(log_std)
-
-        # Create a normal distribution with the predicted mean and std
-        normal = torch.distributions.Normal(mean, std)
-
-        # Compute log probability of the taken actions
-        log_prob = normal.log_prob(actions)
+        action_logits = self.policy(states)
 
         # Compute the policy loss
-        loss = -(log_prob * rewards).mean()
+        loss = -(action_logits * rewards).mean()
 
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.policy.parameters(), max_norm=1)
@@ -137,15 +140,10 @@ def rollout(user, environment, controller, max_steps, explore=True):
         user_signal = user.get_signal(state)
 
         action = controller(user_signal, explore)
-        # In SL we have a tanh activation which naturally clips the actions, in RL we have a gaussian distribution
-        # this clamp clips the actions before they go into the environment, which means we are not really following
-        # the normal distribution, if we don't do that we might sample big actions that destabilize learning by having
-        # extreme log_probs.
-        action_clip = torch.clamp(action, -1, 1)
-        new_state, reward, done = environment.step(action_clip.item())
+        new_state, reward, done = environment.step(action.item())
 
         states.append(user_signal)
-        actions.append(action_clip)
+        actions.append(action)
         optimal_actions.append(torch.tensor([environment.goal - state], dtype=torch.float32))
         rewards.append(reward)
 
@@ -165,13 +163,13 @@ def main():
     controller = Controller()
 
     steps = 5
-    epochs = 50_000 // steps
+    epochs = 500_000 // steps
 
     initial_parameters = controller.state_dict()
 
     rl_losses, rl_reward_history, mus, stds = train_rl(environment, controller, user, steps, epochs)
     controller.load_state_dict(initial_parameters)
-    sl_losses, sl_reward_history = train_sl(environment, controller, user, steps, epochs // 2)
+    sl_losses, sl_reward_history = train_sl(environment, controller, user, steps, epochs // 10)
 
     plt.title("mus")
     plt.plot(mus)
@@ -208,7 +206,7 @@ def train_rl(environment, controller: Controller, user, steps, epochs):
     stds = []
     for epoch in tqdm.trange(epochs):
         states, actions, optimal_actions, rewards = rollout(user, environment, controller, max_steps=steps)
-        loss = controller.rl_update(actions, states, rewards)
+        loss = controller.rl_update(states, actions,  rewards)
         rl_reward_history.append(sum(rewards).item())
         rl_losses.append(loss)
         mus.append(controller.policy.mu_head[0].weight.item())
