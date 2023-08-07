@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -43,15 +44,17 @@ class GaussianPolicy(nn.Module):
     def __init__(self, input_dim, output_dim):
         super(GaussianPolicy, self).__init__()
         self.mu_head = torch.nn.Sequential(
-            nn.Linear(input_dim, output_dim),
-            torch.nn.Tanh()
+            nn.Linear(input_dim, output_dim, bias=False),
         )
-        self.log_std_head = nn.Linear(input_dim, output_dim)
+        self.log_std_head = nn.Linear(input_dim, output_dim, bias=True)
 
     def forward(self, state):
         x = state
         mu = self.mu_head(x)
-        log_std = self.log_std_head(x)
+
+        # Since we have only one learnable parameter let the bias control the variance level
+        log_std = self.log_std_head(torch.zeros_like(state))
+
         # usually, you need to limit the values of log_std
         log_std = torch.clamp(log_std, min=-20, max=2)
         return mu, log_std
@@ -115,9 +118,9 @@ class Controller(nn.Module):
     def sl_update(self, states, optimal_actions):
         self.train()
         self.optimizer.zero_grad()
-
         predicted_actions = self.deterministic_forward(states)
-        loss = torch.nn.functional.mse_loss(predicted_actions, torch.clamp(optimal_actions, -1, 1))
+        reachable_optimal_action = torch.clamp(optimal_actions, -1, 1)
+        loss = torch.nn.functional.mse_loss(predicted_actions, reachable_optimal_action)
         loss.backward()
         self.optimizer.step()
         return loss.item()
@@ -134,10 +137,15 @@ def rollout(user, environment, controller, max_steps, explore=True):
         user_signal = user.get_signal(state)
 
         action = controller(user_signal, explore)
-        new_state, reward, done = environment.step(action.item())
+        # In SL we have a tanh activation which naturally clips the actions, in RL we have a gaussian distribution
+        # this clamp clips the actions before they go into the environment, which means we are not really following
+        # the normal distribution, if we don't do that we might sample big actions that destabilize learning by having
+        # extreme log_probs.
+        action_clip = torch.clamp(action, -1, 1)
+        new_state, reward, done = environment.step(action_clip.item())
 
         states.append(user_signal)
-        actions.append(action)
+        actions.append(action_clip)
         optimal_actions.append(torch.tensor([environment.goal - state], dtype=torch.float32))
         rewards.append(reward)
 
@@ -156,14 +164,24 @@ def main():
     environment = Environment(goal=1)
     controller = Controller()
 
-    steps = 1  # 00
-    epochs = (100_000 // 8) // steps
+    steps = 5
+    epochs = 50_000 // steps
 
     initial_parameters = controller.state_dict()
 
-    rl_losses, rl_reward_history = train_rl(environment, controller, user, steps, epochs)
+    rl_losses, rl_reward_history, mus, stds = train_rl(environment, controller, user, steps, epochs)
     controller.load_state_dict(initial_parameters)
-    sl_losses, sl_reward_history = train_sl(environment, controller, user, steps, epochs)
+    sl_losses, sl_reward_history = train_sl(environment, controller, user, steps, epochs // 2)
+
+    plt.title("mus")
+    plt.plot(mus)
+    plt.show()
+    plt.title("stds")
+    stds = np.array(stds)
+    plt.plot(stds[:, 0], label="weight")
+    plt.plot(stds[:, 1], label="bias")
+    plt.legend()
+    plt.show()
 
     plt.title("RL rewards")
     plt.plot(rl_reward_history, label='RL')
@@ -186,12 +204,19 @@ def main():
 def train_rl(environment, controller: Controller, user, steps, epochs):
     rl_reward_history = []
     rl_losses = []
+    mus = []
+    stds = []
     for epoch in tqdm.trange(epochs):
         states, actions, optimal_actions, rewards = rollout(user, environment, controller, max_steps=steps)
         loss = controller.rl_update(actions, states, rewards)
         rl_reward_history.append(sum(rewards).item())
         rl_losses.append(loss)
-    return rl_losses, rl_reward_history
+        mus.append(controller.policy.mu_head[0].weight.item())
+        stds.append((
+            controller.policy.log_std_head.weight.item(),
+            controller.policy.log_std_head.bias.item()
+        ))
+    return rl_losses, rl_reward_history, mus, stds
 
 
 def train_sl(environment, controller, user, steps, epochs):
