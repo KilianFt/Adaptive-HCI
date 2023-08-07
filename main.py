@@ -1,5 +1,3 @@
-import pickle
-
 import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
@@ -27,7 +25,9 @@ class Environment:
         position = torch.tensor(self.position, dtype=torch.float32)
         distance_from_goal = torch.abs(position - self.goal)
         done = self.is_done()
-        return self.get_state(), -distance_from_goal, done
+        reward = -distance_from_goal
+        reward = torch.clamp(reward, -1, 1)
+        return self.get_state(), reward, done
 
     def is_done(self):
         return self.position == self.goal
@@ -39,37 +39,91 @@ class Environment:
         self.position = 0
 
 
+class GaussianPolicy(nn.Module):
+    def __init__(self, input_dim, output_dim):
+        super(GaussianPolicy, self).__init__()
+        self.mu_head = torch.nn.Sequential(
+            nn.Linear(input_dim, output_dim),
+            torch.nn.Tanh()
+        )
+        self.log_std_head = nn.Linear(input_dim, output_dim)
+
+    def forward(self, state):
+        x = state
+        mu = self.mu_head(x)
+        log_std = self.log_std_head(x)
+        # usually, you need to limit the values of log_std
+        log_std = torch.clamp(log_std, min=-20, max=2)
+        return mu, log_std
+
+
 class Controller(nn.Module):
     def __init__(self):
         super(Controller, self).__init__()
-        self.fc = nn.Linear(1, 1)
-        self.loss_function = nn.MSELoss()
-        self.optimizer = optim.Adam(self.parameters(), lr=0.01)
+        self.policy = GaussianPolicy(1, 1)
+        self.optimizer = optim.Adam(self.parameters(), lr=3e-4)
 
-    def forward(self, x):
-        return self.fc(x)
+    def forward(self, x, explore):
+        mu, log_std = self.policy(x)
+        std = torch.exp(log_std)
+        if explore:
+            normal = torch.distributions.Normal(mu, std)
+            action = normal.sample()
+        else:
+            action = mu
+        return action
 
-    def train_rl(self, states, actions, rewards):
+    def deterministic_forward(self, x):
+        mu, _ = self.policy(x)
+        return mu
+
+    def rl_update(self, states, actions, rewards):
+        """
+        Train the RL model using states, actions, and rewards.
+
+        Args:
+            states (torch.Tensor): The input states.
+            actions (torch.Tensor): The taken actions.
+            rewards (torch.Tensor): The rewards.
+            epoch (int): The current epoch.
+
+        Returns:
+            float: The loss value.
+        """
+        if not self.training:
+            self.train()
+        self.optimizer.zero_grad()
+
+        # Let's assume that the model predicts mean and log_std of a Gaussian distribution
+        mean, log_std = self.policy(states)
+        std = torch.exp(log_std)
+
+        # Create a normal distribution with the predicted mean and std
+        normal = torch.distributions.Normal(mean, std)
+
+        # Compute log probability of the taken actions
+        log_prob = normal.log_prob(actions)
+
+        # Compute the policy loss
+        loss = -(log_prob * rewards).mean()
+
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.policy.parameters(), max_norm=1)
+        self.optimizer.step()
+        return loss.item()
+
+    def sl_update(self, states, optimal_actions):
         self.train()
         self.optimizer.zero_grad()
 
-        predicted_actions = self(states)
-        loss = self.loss_function(predicted_actions * rewards, actions * rewards)
+        predicted_actions = self.deterministic_forward(states)
+        loss = torch.nn.functional.mse_loss(predicted_actions, torch.clamp(optimal_actions, -1, 1))
         loss.backward()
         self.optimizer.step()
         return loss.item()
 
-    def train_sl(self, states, optimal_actions):
-        self.train()
-        self.optimizer.zero_grad()
 
-        predicted_actions = self(states)
-        loss = self.loss_function(predicted_actions, torch.tanh(optimal_actions))
-        loss.backward()
-        self.optimizer.step()
-
-
-def rollout(user, environment, controller, max_steps):
+def rollout(user, environment, controller, max_steps, explore=True):
     environment.reset()
     states = []
     actions = []
@@ -79,28 +133,21 @@ def rollout(user, environment, controller, max_steps):
         state = environment.get_state()
         user_signal = user.get_signal(state)
 
-        action = controller(user_signal)
+        action = controller(user_signal, explore)
         new_state, reward, done = environment.step(action.item())
 
         states.append(user_signal)
-        actions.append(user_signal)
+        actions.append(action)
         optimal_actions.append(torch.tensor([environment.goal - state], dtype=torch.float32))
         rewards.append(reward)
 
         if done:
             break
 
-    path = 'environment_data.pkl'
-    with open(path, 'wb') as f:
-        pickle.dump([
-            torch.stack(states),
-            torch.stack(actions),
-            torch.stack(optimal_actions),
-            torch.stack(rewards).unsqueeze(-1),
-        ], f)
-
-    with open(path, 'rb') as f:
-        states, actions, optimal_actions, rewards = pickle.load(f)
+    states = torch.stack(states)
+    actions = torch.stack(actions)
+    optimal_actions = torch.stack(optimal_actions)
+    rewards = torch.stack(rewards).unsqueeze(-1)
     return states, actions, optimal_actions, rewards
 
 
@@ -109,16 +156,55 @@ def main():
     environment = Environment(goal=1)
     controller = Controller()
 
-    controller.fc.weight.data = -torch.abs(controller.fc.weight.data)
-    reward_history = []
+    steps = 1  # 00
+    epochs = (100_000 // 8) // steps
 
-    for _ in tqdm.trange(10_000):
-        states, actions, optimal_actions, rewards = rollout(user, environment, controller, max_steps=10)
-        reward_history.append(sum(rewards))
-        controller.train_sl(states, optimal_actions)
+    initial_parameters = controller.state_dict()
 
-    plt.plot(reward_history)
+    rl_losses, rl_reward_history = train_rl(environment, controller, user, steps, epochs)
+    controller.load_state_dict(initial_parameters)
+    sl_losses, sl_reward_history = train_sl(environment, controller, user, steps, epochs)
+
+    plt.title("RL rewards")
+    plt.plot(rl_reward_history, label='RL')
     plt.show()
+    plt.title("SL rewards")
+    plt.plot(sl_reward_history, label='SL Reward')
+    plt.show()
+
+    plt.title("RL losses")
+    plt.plot(rl_losses, label='RL Loss')
+    plt.show()
+    plt.title("SL losses")
+    plt.plot(sl_losses, label='SL Loss')
+    plt.legend()
+    plt.show()
+
+    print("done")
+
+
+def train_rl(environment, controller: Controller, user, steps, epochs):
+    rl_reward_history = []
+    rl_losses = []
+    for epoch in tqdm.trange(epochs):
+        states, actions, optimal_actions, rewards = rollout(user, environment, controller, max_steps=steps)
+        loss = controller.rl_update(actions, states, rewards)
+        rl_reward_history.append(sum(rewards).item())
+        rl_losses.append(loss)
+    return rl_losses, rl_reward_history
+
+
+def train_sl(environment, controller, user, steps, epochs):
+    sl_reward_history = []
+    sl_losses = []
+    for _epoch in tqdm.trange(epochs):
+        states, actions, optimal_actions, rewards = rollout(
+            user, environment, controller, max_steps=steps, explore=False)
+        loss = controller.sl_update(states, optimal_actions)
+
+        sl_reward_history.append(sum(rewards).item())
+        sl_losses.append(loss)
+    return sl_losses, sl_reward_history
 
 
 if __name__ == '__main__':
