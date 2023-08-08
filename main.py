@@ -9,6 +9,13 @@ import torch.optim as optim
 import tqdm
 import pygame
 
+# TODO (Kilian)
+# - initialize mu as negative
+# - save recodring
+# - test recording
+# - evaluate recording
+# - wandb integration
+
 class User:
     def __init__(self, goal, middle_pixel):
         self.goal = goal
@@ -56,29 +63,12 @@ class Environment:
 class GaussianPolicy(nn.Module):
     def __init__(self, input_dim, output_dim):
         super(GaussianPolicy, self).__init__()
+        linear = nn.Linear(input_dim, output_dim, bias=False)
+        linear.weight.data.fill_(-1)
         self.mu_head = torch.nn.Sequential(
-            nn.Linear(input_dim, output_dim, bias=False),
+            linear,
         )
-        self.log_std_head = nn.Linear(input_dim, output_dim, bias=True)
-
-    def forward(self, state):
-        x = state
-        mu = self.mu_head(x)
-
-        # Since we have only one learnable parameter let the bias control the variance level
-        log_std = self.log_std_head(torch.zeros_like(state))
-
-        # usually, you need to limit the values of log_std
-        log_std = torch.clamp(log_std, min=-20, max=2)
-        return mu, log_std
-
-
-class GaussianPolicy(nn.Module):
-    def __init__(self, input_dim, output_dim):
-        super(GaussianPolicy, self).__init__()
-        self.mu_head = torch.nn.Sequential(
-            nn.Linear(input_dim, output_dim, bias=False),
-        )
+        
         self.log_std_head = nn.Linear(input_dim, output_dim, bias=True)
 
     def forward(self, state):
@@ -163,10 +153,6 @@ def norm_pos_to_pixel(norm_position):
     return 249 * (norm_position + 1)
 
 
-def norm_pos_to_pixel(norm_position):
-    return 249 * (norm_position + 1)
-
-
 def rollout(user, environment, controller, screen, clock, max_steps, explore=True):
     environment.reset()
     states = []
@@ -227,42 +213,6 @@ def rollout(user, environment, controller, screen, clock, max_steps, explore=Tru
                         center=(norm_pos_to_pixel(environment.get_goal()), line_y),
                         radius=8)
 
-        screen.fill((0,0,0))
-        line_y = (screen.get_height() / 2)
-        pygame.draw.line(screen,
-                        color=(255,255,255),
-                        start_pos=(0, line_y),
-                        end_pos=(screen.get_width(), line_y),
-                        width=5)
-
-        pygame.draw.circle(surface=screen,
-                        color=(255,255,255),
-                        center=(norm_pos_to_pixel(new_state), line_y),
-                        radius=8)
-
-        pygame.draw.circle(surface=screen,
-                        color=(0,255,0),
-                        center=(norm_pos_to_pixel(environment.get_goal()), line_y),
-                        radius=8)
-
-        screen.fill((0,0,0))
-        line_y = (screen.get_height() / 2)
-        pygame.draw.line(screen,
-                        color=(255,255,255),
-                        start_pos=(0, line_y),
-                        end_pos=(screen.get_width(), line_y),
-                        width=5)
-
-        pygame.draw.circle(surface=screen,
-                        color=(255,255,255),
-                        center=(norm_pos_to_pixel(new_state), line_y),
-                        radius=8)
-
-        pygame.draw.circle(surface=screen,
-                        color=(0,255,0),
-                        center=(norm_pos_to_pixel(environment.get_goal()), line_y),
-                        radius=8) 
-
         states.append(user_signal)
         actions.append(action_clip)
         optimal_actions.append(torch.tensor([environment.goal - state], dtype=torch.float32))
@@ -298,7 +248,7 @@ def main():
     steps = 100
     epochs = 100_000 // steps
 
-    initial_parameters = controller.state_dict()
+    # initial_parameters = controller.state_dict()
 
     # rl_losses, rl_reward_history, mus, stds = train_rl(environment, controller, user, steps, epochs)
     # controller.load_state_dict(initial_parameters)
@@ -366,6 +316,9 @@ def train_sl(environment, controller, user, screen, clock, steps, epochs):
 
         sl_reward_history.append(sum(rewards).item())
         sl_losses.append(loss)
+        print(controller.policy.mu_head[0].weight.item())
+        print(controller.policy.log_std_head.weight.item())
+        print(controller.policy.log_std_head.bias.item())
     return sl_losses, sl_reward_history
 
     pygame.quit()
