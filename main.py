@@ -45,6 +45,9 @@ class Environment:
     def get_goal(self):
         return self.goal
 
+    def get_goal(self):
+        return self.goal
+
     def reset(self):
         self.position = 0
         self.goal = -1 + np.random.rand() * 2
@@ -160,6 +163,10 @@ def norm_pos_to_pixel(norm_position):
     return 249 * (norm_position + 1)
 
 
+def norm_pos_to_pixel(norm_position):
+    return 249 * (norm_position + 1)
+
+
 def rollout(user, environment, controller, screen, clock, max_steps, explore=True):
     environment.reset()
     states = []
@@ -171,7 +178,19 @@ def rollout(user, environment, controller, screen, clock, max_steps, explore=Tru
     running = True
     pygame.mouse.set_pos((249,0))
 
+
+    dt = 0
+    running = True
+    pygame.mouse.set_pos((249,0))
+
     for t in range(max_steps):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            if event.type == pygame.KEYDOWN:
+                if event.unicode == 'q':
+                    running = False
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -225,6 +244,24 @@ def rollout(user, environment, controller, screen, clock, max_steps, explore=Tru
                         color=(0,255,0),
                         center=(norm_pos_to_pixel(environment.get_goal()), line_y),
                         radius=8)
+
+        screen.fill((0,0,0))
+        line_y = (screen.get_height() / 2)
+        pygame.draw.line(screen,
+                        color=(255,255,255),
+                        start_pos=(0, line_y),
+                        end_pos=(screen.get_width(), line_y),
+                        width=5)
+
+        pygame.draw.circle(surface=screen,
+                        color=(255,255,255),
+                        center=(norm_pos_to_pixel(new_state), line_y),
+                        radius=8)
+
+        pygame.draw.circle(surface=screen,
+                        color=(0,255,0),
+                        center=(norm_pos_to_pixel(environment.get_goal()), line_y),
+                        radius=8) 
 
         states.append(user_signal)
         actions.append(action_clip)
@@ -331,6 +368,7 @@ def train_sl(environment, controller, user, screen, clock, steps, epochs):
         sl_losses.append(loss)
     return sl_losses, sl_reward_history
 
+    pygame.quit()
 
 if __name__ == '__main__':
     main()
