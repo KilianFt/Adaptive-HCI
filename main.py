@@ -19,7 +19,7 @@ import pygame
 
 class User:
     def __init__(self, goal, middle_pixel):
-        self.goal = goal
+        # self.goal = goal
         self.middle = middle_pixel
 
     def get_signal(self):
@@ -234,6 +234,25 @@ def rollout(user, environment, controller, screen, clock, max_steps, explore=Tru
     return states, actions, optimal_actions, rewards
 
 
+def simulate_policy(controller, test_episodes):
+
+    steps_to_goal_array = []
+    for episode in test_episodes:
+        
+        predicted_actions = controller.deterministic_forward(episode['states'])
+
+        current_pos = 0
+        steps_to_goal = predicted_actions.size()[0]
+        for i, action in enumerate(predicted_actions):
+            current_pos += action / 10
+            if abs(current_pos - episode['goal']) < 0.01:
+                steps_to_goal = i
+                break
+
+        steps_to_goal_array.append(steps_to_goal)
+    
+    return steps_to_goal_array
+
 def main():
     parser = argparse.ArgumentParser(prog='Adaptive HCI')
     
@@ -249,8 +268,11 @@ def main():
 
         controller = Controller()
 
-        sl_losses = train_sl_offline(controller, episodes, 100)
+        sl_losses, sl_sim_reward = train_sl_offline(controller, episodes, 100)
+        # FIXME use different dataset here
         plt.plot(sl_losses)
+        plt.show()
+        plt.plot(sl_sim_reward)
         plt.show()
         quit()
 
@@ -265,7 +287,7 @@ def main():
     environment = Environment()
     controller = Controller()
 
-    steps = 10
+    steps = 100
     epochs = 100_000 // steps
 
     # initial_parameters = controller.state_dict()
@@ -278,7 +300,7 @@ def main():
                                             screen,
                                             clock,
                                             steps,
-                                            2)#epochs // 2)
+                                            5)#epochs // 2)
 
     now = datetime.now()
     path = now.strftime("environment_data_%Y_%m_%d_%H:%M:%S.pkl")
@@ -333,44 +355,43 @@ def train_rl(environment, controller: Controller, user, steps, epochs):
 
 def train_sl(environment, controller, user, screen, clock, steps, epochs):
     sl_reward_history = []
-    states_array = []
-    actions_array = []
-    optimal_actions_array = []
-    rewards_array = []
     sl_losses = []
+
+    episodes = []
+
     for _epoch in tqdm.trange(epochs):
         states, actions, optimal_actions, rewards = rollout(
             user, environment, controller, screen, clock, max_steps=steps, explore=False)
         loss = controller.sl_update(states, optimal_actions)
 
-        states_array.append(states)
-        actions_array.append(actions)
-        optimal_actions_array.append(optimal_actions)
-        rewards_array.append(rewards)
+        episodes.append({
+            'states': states,
+            'actions': actions,
+            'optimal_actions': optimal_actions, 
+            'rewards': rewards,
+            'goal': environment.get_goal(),
+        })
         sl_reward_history.append(sum(rewards).item())
         sl_losses.append(loss)
-
-    episodes = ({'states': torch.cat(states_array),
-                'actions': torch.cat(actions_array),
-                'optimal_actions': torch.cat(optimal_actions_array), 
-                'rewards': torch.cat(rewards_array),
-                })
         
     return sl_losses, sl_reward_history, episodes
 
     pygame.quit()
 
 def train_sl_offline(controller, episodes, epochs):
-    states = episodes['states']
-    optimal_actions = episodes['optimal_actions']
+    states = torch.cat([e['states'] for e in episodes])
+    optimal_actions = torch.cat([e['optimal_actions'] for e in episodes])
 
     sl_losses = []
+    sim_reward = []
 
     for _epoch in tqdm.trange(epochs):
         loss = controller.sl_update(states, optimal_actions)
+        steps_to_goal = simulate_policy(controller, episodes)
         sl_losses.append(loss)
+        sim_reward.append(sum(steps_to_goal))
 
-    return sl_losses
+    return sl_losses, sim_reward
 
 if __name__ == '__main__':
     main()
