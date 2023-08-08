@@ -1,4 +1,6 @@
 import pickle
+from datetime import datetime
+import argparse
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -10,8 +12,7 @@ import tqdm
 import pygame
 
 # TODO (Kilian)
-# - initialize mu as negative
-# - save recodring
+# - train test split
 # - test recording
 # - evaluate recording
 # - wandb integration
@@ -234,6 +235,25 @@ def rollout(user, environment, controller, screen, clock, max_steps, explore=Tru
 
 
 def main():
+    parser = argparse.ArgumentParser(prog='Adaptive HCI')
+    
+    parser.add_argument('--train_offline', action='store_true')
+    parser.add_argument('--dataset', default=None)
+    args = parser.parse_args()
+
+    if args.train_offline:
+        assert args.dataset is not None, "Please specify dataset for offline training"
+        
+        with open(args.dataset, 'rb') as f:
+            episodes = pickle.load(f)
+
+        controller = Controller()
+
+        sl_losses = train_sl_offline(controller, episodes, 100)
+        plt.plot(sl_losses)
+        plt.show()
+        quit()
+
     WIDTH = 500
     HEIGHT = 100
 
@@ -245,20 +265,25 @@ def main():
     environment = Environment()
     controller = Controller()
 
-    steps = 100
+    steps = 10
     epochs = 100_000 // steps
 
     # initial_parameters = controller.state_dict()
 
     # rl_losses, rl_reward_history, mus, stds = train_rl(environment, controller, user, steps, epochs)
     # controller.load_state_dict(initial_parameters)
-    sl_losses, sl_reward_history = train_sl(environment,
+    sl_losses, sl_reward_history, episodes = train_sl(environment,
                                             controller,
                                             user,
                                             screen,
                                             clock,
                                             steps,
-                                            5)#epochs // 2)
+                                            2)#epochs // 2)
+
+    now = datetime.now()
+    path = now.strftime("environment_data_%Y_%m_%d_%H:%M:%S.pkl")
+    with open(path, 'wb') as f:
+        pickle.dump(episodes, f)
 
     # plt.title("mus")
     # plt.plot(mus)
@@ -308,20 +333,44 @@ def train_rl(environment, controller: Controller, user, steps, epochs):
 
 def train_sl(environment, controller, user, screen, clock, steps, epochs):
     sl_reward_history = []
+    states_array = []
+    actions_array = []
+    optimal_actions_array = []
+    rewards_array = []
     sl_losses = []
     for _epoch in tqdm.trange(epochs):
         states, actions, optimal_actions, rewards = rollout(
             user, environment, controller, screen, clock, max_steps=steps, explore=False)
         loss = controller.sl_update(states, optimal_actions)
 
+        states_array.append(states)
+        actions_array.append(actions)
+        optimal_actions_array.append(optimal_actions)
+        rewards_array.append(rewards)
         sl_reward_history.append(sum(rewards).item())
         sl_losses.append(loss)
-        print(controller.policy.mu_head[0].weight.item())
-        print(controller.policy.log_std_head.weight.item())
-        print(controller.policy.log_std_head.bias.item())
-    return sl_losses, sl_reward_history
+
+    episodes = ({'states': torch.cat(states_array),
+                'actions': torch.cat(actions_array),
+                'optimal_actions': torch.cat(optimal_actions_array), 
+                'rewards': torch.cat(rewards_array),
+                })
+        
+    return sl_losses, sl_reward_history, episodes
 
     pygame.quit()
+
+def train_sl_offline(controller, episodes, epochs):
+    states = episodes['states']
+    optimal_actions = episodes['optimal_actions']
+
+    sl_losses = []
+
+    for _epoch in tqdm.trange(epochs):
+        loss = controller.sl_update(states, optimal_actions)
+        sl_losses.append(loss)
+
+    return sl_losses
 
 if __name__ == '__main__':
     main()
