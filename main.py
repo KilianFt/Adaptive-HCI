@@ -2,7 +2,6 @@ import gym
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import torch.nn as nn
 import tqdm
 from stable_baselines3 import PPO
 
@@ -18,12 +17,12 @@ class User:
 
 
 class Environment(gym.Env):
-    def __init__(self, user, goal):
+    def __init__(self, user, goal, max_steps):
         self.goal = goal
         self.user = user
         self.position = None
         self.current_steps = None
-        self.max_steps = 100
+        self.max_steps = max_steps
         self.reset()
 
     def step(self, action):
@@ -56,23 +55,6 @@ class Environment(gym.Env):
         return gym.spaces.Box(low=-1, high=1, shape=(1,))
 
 
-class CategoricalPolicy(nn.Module):
-    def __init__(self, input_dim, num_classes):
-        super(CategoricalPolicy, self).__init__()
-        self.action_head = torch.nn.Sequential(
-            torch.nn.Linear(input_dim, 32),
-            torch.nn.ReLU(),
-            torch.nn.Linear(32, 32),
-            torch.nn.ReLU(),
-            torch.nn.Linear(32, num_classes),
-        )
-
-    def forward(self, state):
-        x = state
-        action_logits = self.action_head(x)
-        return action_logits
-
-
 class Controller(PPO):
     def __init__(self, env):
         super(Controller, self).__init__(
@@ -82,54 +64,10 @@ class Controller(PPO):
             verbose=1,
             tensorboard_log="tmp/a2c_cartpole_tensorboard/",
         )
-        magnitude = 1.0
-
-        self.index_to_action = np.array([
-            -magnitude,
-            # -magnitude / 2,
-            # magnitude / 2,
-            magnitude])
-        self.action_to_index = {action: index for index, action in enumerate(self.index_to_action)}
-        # self.policy = CategoricalPolicy(input_dim=1, num_classes=len(self.index_to_action))
-        # self.optimizer = optim.Adam(self.parameters(), lr=3e-4)
 
     def deterministic_forward(self, x):
         dist = self.policy.get_distribution(x)
         return dist.distribution.mean
-
-    def rl_update(self, states, actions, rewards):
-        """
-        Train the RL model using states, actions, and rewards.
-
-        Args:
-            states (torch.Tensor): The input states.
-            actions (torch.Tensor): The taken actions.
-            rewards (torch.Tensor): The rewards.
-            epoch (int): The current epoch.
-
-        Returns:
-            float: The loss value.
-        """
-        if not self.training:
-            self.train()
-        self.optimizer.zero_grad()
-
-        action_logits = self.policy(states)
-
-        # Compute the log probabilities of the actions
-        log_probabilities = torch.nn.functional.log_softmax(action_logits, dim=1)
-
-        # Select the log probabilities of the actions that were actually taken
-        log_probabilities = log_probabilities[range(len(actions)), actions]
-
-        # Compute the loss
-        advantage = rewards.squeeze(1) - torch.mean(rewards, dim=1)
-        loss = -torch.einsum("i,i->", advantage, log_probabilities)
-
-        loss.backward()
-        self.optimizer.step()
-
-        return loss.item()
 
     def sl_update(self, states, optimal_actions):
         self.policy.train()
@@ -143,15 +81,15 @@ class Controller(PPO):
         return loss.item()
 
 
-def rollout(user, environment, controller, max_steps, explore=True):
-    s0 = environment.reset()
+def deterministic_rollout(user, environment, controller):
+    state = environment.reset()
     states = []
     action_means = []
     optimal_actions = []
     rewards = []
-    t = 0
-    for t in range(max_steps):
-        state = environment.get_state()
+    time_step = 0
+    done = False
+    while not done:
         user_signal = user.get_signal(state)
 
         action_mean = controller.deterministic_forward(user_signal.unsqueeze(0))
@@ -162,23 +100,20 @@ def rollout(user, environment, controller, max_steps, explore=True):
         optimal_actions.append(torch.tensor([state - environment.goal], dtype=torch.float32))
         rewards.append(reward)
 
-        if done:
-            break
+        state = new_state
 
     states = torch.stack(states)
     action_means = torch.stack(action_means)
     optimal_actions = torch.stack(optimal_actions)
     rewards = torch.tensor(rewards).unsqueeze(-1)
-    time_to_goal = t
-    return states, action_means, optimal_actions, rewards, time_to_goal
+    return states, action_means, optimal_actions, rewards, time_step
 
 
 def main():
     user = User(goal=1)
-    environment = Environment(user=user, goal=1)
+    environment = Environment(user=user, goal=1, max_steps=50)
     controller = Controller(env=environment)
 
-    steps = 50
     total_timesteps = 10_000
     initial_parameters = controller.policy.state_dict()
     learner = controller.learn(total_timesteps=total_timesteps)
@@ -186,7 +121,7 @@ def main():
 
     controller.policy.load_state_dict(initial_parameters)
 
-    sl_losses, sl_reward_history, sl_avg_steps = train_sl(environment, controller, user, steps, total_timesteps)
+    sl_losses, sl_reward_history, sl_avg_steps = train_sl(environment, controller, user, total_timesteps)
 
     plot_and_mean(sl_avg_steps, "SL avg steps")
     plot_and_mean(sl_reward_history, "SL rewards")
@@ -211,14 +146,13 @@ def train_rl(controller: Controller, epochs):
     return controller.learn(epochs)
 
 
-def train_sl(environment, controller, user, steps, epochs):
+def train_sl(environment, controller, user, epochs):
     sl_reward_history = []
     sl_losses = []
     performances = []
 
     for _epoch in tqdm.trange(epochs):
-        states, actions, optimal_actions, rewards, performance = rollout(
-            user, environment, controller, max_steps=steps, explore=False)
+        states, actions, optimal_actions, rewards, performance = deterministic_rollout(user, environment, controller)
         loss = controller.sl_update(states, optimal_actions)
 
         sl_reward_history.append(torch.mean(rewards))
