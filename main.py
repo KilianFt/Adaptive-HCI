@@ -24,7 +24,7 @@ class Environment(gym.Env):
         self.position = None
         self.current_steps = None
         self.max_steps = 100
-        self.reset
+        self.reset()
 
     def step(self, action):
         self.position += action
@@ -135,7 +135,6 @@ class Controller(PPO):
         self.policy.train()
         self.policy.optimizer.zero_grad()
         predicted_action = self.deterministic_forward(states)
-        # target_action = torch.argmin(torch.abs(optimal_actions - self.index_to_action), dim=1)
         target_action = torch.clip(optimal_actions, -1, 1)
 
         loss = torch.nn.functional.mse_loss(predicted_action, target_action)
