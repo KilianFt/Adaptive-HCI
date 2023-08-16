@@ -37,7 +37,9 @@ def deterministic_rollout(user, environment, controller):
 
 
 def train_rl(controller: RLSLController, epochs):
-    return controller.learn(epochs)
+    learner = controller.learn(epochs)
+    learner.logger.dump()
+    return learner
 
 
 def train_sl(environment, controller, user, epochs):
@@ -62,8 +64,7 @@ def main():
 
     total_timesteps = 10_000
     initial_parameters = controller.policy.state_dict()
-    # learner = controller.learn(total_timesteps=total_timesteps)
-    # learner.logger.dump()
+    train_rl(controller, total_timesteps)
 
     controller.policy.load_state_dict(initial_parameters)
 
