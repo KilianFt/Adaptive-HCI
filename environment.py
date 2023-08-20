@@ -14,6 +14,7 @@ class Environment(gym.Env):
 
     def step(self, action):
         self.position += action
+        self.position = max(min(self.position, 10.), -10.)
         position = torch.tensor(self.position, dtype=torch.float32)
         distance_from_goal = torch.abs(position - self.goal)
         done = self.is_done()
@@ -25,11 +26,15 @@ class Environment(gym.Env):
         return np.abs(self.position - self.goal) < 1 or self.current_steps >= self.max_steps
 
     def get_state(self):
-        return self.user.get_signal(self.position)
+        return self.position
+
+    def get_goal(self):
+        return self.goal
 
     def reset(self, **kwargs):
         super(Environment, self).reset(**kwargs)
-        self.position = np.random.randint(-10, 10)
+        self.goal = np.random.randint(-10, 10)
+        self.position = 0
         self.current_steps = 0
         return self.get_state()
 

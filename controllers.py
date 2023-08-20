@@ -10,6 +10,7 @@ class RLSLController(PPO):
             n_steps=50,
             verbose=1,
             tensorboard_log="tmp/a2c_cartpole_tensorboard/",
+            learning_rate=1e-2,
         )
 
     def deterministic_forward(self, x):
