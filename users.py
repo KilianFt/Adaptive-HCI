@@ -8,5 +8,5 @@ class ProportionalUser:
 
     def get_signal(self):
         mouse_pos = torch.Tensor(pygame.mouse.get_pos())
-        signal = mouse_pos - self.middle_pixels / self.middle_pixels
+        signal = (mouse_pos - self.middle_pixels) / self.middle_pixels
         return signal

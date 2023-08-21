@@ -4,9 +4,8 @@ import torch
 
 
 class Environment(gym.Env):
-    def __init__(self, user, max_steps):
+    def __init__(self, max_steps):
         self.goal = np.random.rand(2) * 10
-        self.user = user
         self.position = np.zeros(2)
         self.current_steps = None
         self.max_steps = max_steps
