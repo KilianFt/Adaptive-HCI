@@ -10,7 +10,7 @@ class RLSLController(PPO):
             n_steps=50,
             verbose=1,
             tensorboard_log="tmp/fetch_reach_tensorboard/",
-            learning_rate=1e-2,
+            learning_rate=5e-3,
         )
 
     def deterministic_forward(self, x):
