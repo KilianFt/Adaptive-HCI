@@ -9,6 +9,7 @@ import torch
 import tqdm
 
 from controllers import RLSLController
+from environment import TwoDProjection, EnvironmentWithUser
 from metrics import plot_and_mean
 from users import MouseProportionalUser
 
@@ -27,7 +28,8 @@ def deterministic_rollout(environment, controller):
 
     for time_step in itertools.count():
         action_mean = controller.deterministic_forward(observation)
-        observation, reward, terminated, truncated, info = environment.step(action_mean.squeeze().detach().numpy())
+        action = action_mean.squeeze().detach().numpy()
+        observation, reward, terminated, truncated, info = environment.step(action)
 
         observation = torch.tensor(observation).unsqueeze(0)
 
@@ -62,7 +64,7 @@ def train_sl(environment, controller, epochs, do_training=True):
     sl_reward_history = []
     sl_reward_sum_history = []
     sl_losses = []
-    performances = []
+    episode_durations = []
     goals = []
 
     if do_training:
@@ -73,7 +75,7 @@ def train_sl(environment, controller, epochs, do_training=True):
     checkpoint_every = max(epochs // 10, 1)
 
     for epoch in tqdm.trange(epochs):
-        states, user_signals, actions, optimal_actions, rewards, performance, goal = deterministic_rollout(
+        states, user_signals, actions, optimal_actions, rewards, episode_duration, goal = deterministic_rollout(
             environment, controller)
 
         if do_training:
@@ -86,67 +88,11 @@ def train_sl(environment, controller, epochs, do_training=True):
 
         sl_reward_history.append(torch.mean(rewards).detach().item())
         sl_reward_sum_history.append(torch.sum(rewards).detach().item())
-        performances.append(performance)
+        episode_durations.append(episode_duration)
         sl_losses.append(loss)
         goals.append(goal)
 
-    return sl_losses, sl_reward_history, sl_reward_sum_history, performances, goals
-
-
-class TwoDProjection(gym.Wrapper):
-    def __init__(self, env):
-        super().__init__(env)
-        self.observation_space = gym.spaces.Dict({
-            "observation": self.observation_space["observation"],
-            "desired_goal": gym.spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float64),
-            "achieved_goal": gym.spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float64),
-        })
-        self.action_space = gym.spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float64)
-
-    @staticmethod
-    def _project_observation(observation):
-        observation["desired_goal"] = observation["desired_goal"][:2]
-        observation["achieved_goal"] = observation["achieved_goal"][:2]
-
-    def reset(self, **kwargs):
-        observation, info = self.env.reset(**kwargs)
-        self._project_observation(observation)
-        return observation, info
-
-    def step(self, action):
-        real_action = np.zeros(4)
-        real_action[:2] = action
-
-        observation, reward, terminated, truncated, info = self.env.step(real_action)
-        self._project_observation(observation)
-        return observation, reward, terminated, truncated, info
-
-
-class EnvironmentWithUser(gym.Wrapper):
-    """
-    This wrapper adds a user to the environment.
-
-    An action goes into the environment, the user observes the environment and returns some features, along with the
-    classical transition.
-    """
-
-    def __init__(self, env: gym.Env, user: MouseProportionalUser):
-        super().__init__(env)
-        self.user = user
-        self.observation_space = gym.spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float64)
-
-    def reset(self, **kwargs):
-        env_obs, env_info = self.env.reset(**kwargs)
-        user_observation, user_info = self.user.reset(env_obs, env_info)
-        return user_observation, user_info
-
-    def step(self, action):
-        observation, reward, terminated, truncated, info = self.env.step(action)
-        return self.user.step(observation, reward, terminated, truncated, info)
-
-    def render(self):
-        self.user.think()
-        return self.env.render()
+    return sl_losses, sl_reward_history, sl_reward_sum_history, episode_durations, goals
 
 
 def main():
@@ -159,12 +105,12 @@ def main():
     do_training = not args.no_training
 
     max_steps = 100
-    total_timesteps = 10_000
+    total_timesteps = 100
 
     user = MouseProportionalUser(simulate_user=True)
 
     # environment = gym.make('FetchReachDense-v2', render_mode="human", max_episode_steps=100)
-    environment = gym.make('FetchReachDense-v2', max_episode_steps=max_steps)
+    environment = gym.make('FetchReachDense-v2', max_episode_steps=max_steps, render_mode="human")
     environment = TwoDProjection(environment)
     environment = EnvironmentWithUser(environment, user)
 
@@ -188,8 +134,14 @@ def main():
     with open('models/2d_fetch/results.pkl', 'wb') as f:
         pickle.dump(results, f)
 
-    sl_reward_goal_dist_ratio = [r / abs(g.sum()) if not abs(g.sum()) == 0 else 0 for r, g in
-                                 zip(sl_reward_sum_history, goals)]
+    sl_reward_goal_dist_ratio = []
+    for r, g in zip(sl_reward_sum_history, goals):
+        gsum = abs(g.sum())
+        if gsum == 0:
+            rgs = 0
+        else:
+            rgs = r / gsum
+        sl_reward_goal_dist_ratio.append(rgs)
 
     plot_and_mean(sl_avg_steps, "SL avg steps")
     plot_and_mean(sl_reward_goal_dist_ratio, "SL return / goal dist")
@@ -199,21 +151,4 @@ def main():
 
 
 if __name__ == '__main__':
-    # with open('models/2d_fetch/results.pkl', 'rb') as f:
-    #     results = pickle.load(f)
-
-    # sl_losses = results['sl_losses']
-    # sl_reward_history = results['sl_reward_history']
-    # sl_reward_sum_history = results['sl_reward_sum_history']
-    # sl_avg_steps = results['sl_avg_steps']
-    # goals = results['goals']
-
-    # sl_reward_goal_dist_ratio = [r / abs(g.sum()) if not abs(g.sum()) == 0 else 0 for r, g in
-    #                              zip(sl_reward_sum_history, goals)]
-
-    # plot_and_mean(sl_avg_steps, "SL avg steps")
-    # plot_and_mean(sl_reward_goal_dist_ratio, "SL return / goal dist")
-    # plot_and_mean(sl_losses, "SL losses")
-
-    # print("done")
     main()

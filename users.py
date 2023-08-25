@@ -26,11 +26,11 @@ class MouseProportionalUser:
 
     def step(self, observation, reward, terminated, truncated, info):
         current_position = observation["achieved_goal"]
-        substitute_goal = observation["desired_goal"]
+        goal_state = observation["desired_goal"]
 
         signal = self._obs_to_features(observation)
 
-        optimal_action = np.where((substitute_goal[:2] > current_position).astype(int), 1, -1).astype(np.float32)
+        optimal_action = (goal_state - current_position).astype(np.float32)
 
         info["original_observation"] = observation
         info["optimal_action"] = optimal_action
@@ -41,9 +41,9 @@ class MouseProportionalUser:
     def think():
         time.sleep(0.1)
 
-    def _obs_to_features(self, _observation):
+    def _obs_to_features(self, observation):
         if self.simulate_user:
-            signal = self.goal - _observation["achieved_goal"]
+            signal = self.goal - observation["achieved_goal"]
         else:
             mouse_pos = np.array(pyautogui.position())
             signal = (mouse_pos - self.middle_pixels) / self.middle_pixels
