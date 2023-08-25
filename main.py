@@ -1,26 +1,22 @@
+import argparse
+import os
+import pickle
+import time
+
+import gymnasium as gym
+import numpy as np
 import torch
 import tqdm
-import time
-import pickle
-import argparse
-import numpy as np
-import gymnasium as gym
-from screeninfo import get_monitors
 
 from controllers import RLSLController
-from metrics import plot_and_mean
-from users import ProportionalUser
+from users import MouseProportionalUser
 
 
-def get_screen_center():
-    monitor = get_monitors()[0]  # Assuming the first monitor is the primary
-    center_x = monitor.width // 2
-    center_y = monitor.height // 2
-    return center_x, center_y
+def deterministic_rollout(environment, controller, max_steps):
+    observation, info = environment.reset()
+    observation = torch.tensor(observation).unsqueeze(0)
 
-
-def deterministic_rollout(user, environment, controller, max_steps):
-    state, _ = environment.reset()
+    rollout_goal = info["original_observation"]["desired_goal"]
 
     states = []
     user_signals = []
@@ -29,45 +25,32 @@ def deterministic_rollout(user, environment, controller, max_steps):
     rewards = []
 
     for time_step in range(max_steps):
-        user_signal = user.get_signal()
+        action_mean = controller.deterministic_forward(observation)
+        observation, reward, terminated, truncated, info = environment.step(action_mean.squeeze().detach().numpy())
 
-        action_mean = controller.deterministic_forward(user_signal.unsqueeze(0))
+        observation = torch.tensor(observation).unsqueeze(0)
 
-        # make sure z never moves
-        action_mean[0,2] = 0.
-        state, _, _, _, info = environment.step(action_mean.squeeze().detach().numpy())
-        current_position = state['achieved_goal'][:2]
+        optimal_action = info["optimal_action"]
 
-        # TODO make this part of the environment
-        # compute 2D goal (ignore z axis)
-        substitute_goal = state["desired_goal"].copy()
-        substitute_goal[2] = state["achieved_goal"].copy()[2]
-        reward = environment.compute_reward(state["achieved_goal"], substitute_goal, info)
-        done = environment.compute_terminated(state["achieved_goal"], substitute_goal, info)
-        truncated = environment.compute_truncated(state["achieved_goal"], substitute_goal, info)
+        assert np.all(rollout_goal == info["original_observation"]["desired_goal"]), "Rollout goal changed!"
 
-        optimal_action = np.where((substitute_goal[:2] > current_position).astype(int), 1, -1)
-        extended_optimal_actions = np.zeros(4)
-        extended_optimal_actions[:2] = optimal_action
-
-        states.append(state)
-        user_signals.append(user_signal)
+        states.append(observation)
+        user_signals.append(observation)
         action_means.append(action_mean)
-        optimal_actions.append(torch.tensor([extended_optimal_actions], dtype=torch.float32))
+        optimal_actions.append(optimal_action)
         rewards.append(reward)
-    
-        if done:
+
+        if terminated or truncated:
             break
 
         time.sleep(.1)
 
     user_signals = torch.stack(user_signals)
     action_means = torch.stack(action_means)
-    optimal_actions = torch.stack(optimal_actions).squeeze()
+    optimal_actions = torch.tensor(optimal_actions)
     rewards = torch.tensor(rewards).unsqueeze(-1)
-    goal = substitute_goal[:2]
 
-    return states, user_signals, action_means, optimal_actions, rewards, time_step, goal
+    return states, user_signals, action_means, optimal_actions, rewards, time_step, rollout_goal
 
 
 def train_rl(controller: RLSLController, epochs):
@@ -76,7 +59,7 @@ def train_rl(controller: RLSLController, epochs):
     return learner
 
 
-def train_sl(environment, controller, user, epochs, max_steps, do_training=True):
+def train_sl(environment, controller, epochs, max_steps, do_training=True):
     sl_reward_history = []
     sl_reward_sum_history = []
     sl_losses = []
@@ -85,15 +68,20 @@ def train_sl(environment, controller, user, epochs, max_steps, do_training=True)
 
     if do_training:
         initial_parameters = controller.policy.state_dict()
+        if not os.path.exists('models/2d_fetch'):
+            os.makedirs('models/2d_fetch')
         torch.save(initial_parameters, 'models/2d_fetch/initial.pt')
+    checkpoint_every = max(epochs // 10, 1)
 
-    for _epoch in tqdm.trange(epochs):
-        states, user_signals, actions, optimal_actions, rewards, performance, goal = deterministic_rollout(user, environment, controller, max_steps)
-        
+    for epoch in tqdm.trange(epochs):
+        states, user_signals, actions, optimal_actions, rewards, performance, goal = deterministic_rollout(
+            environment, controller, max_steps)
+
         if do_training:
             loss = controller.sl_update(user_signals, optimal_actions)
-            parameters = controller.policy.state_dict()
-            torch.save(parameters, 'models/2d_fetch/epoch_'+str(_epoch)+'.pt')
+            if epoch % checkpoint_every == 0:
+                parameters = controller.policy.state_dict()
+                torch.save(parameters, 'models/2d_fetch/epoch_' + str(epoch) + '.pt')
         else:
             loss = None
 
@@ -105,9 +93,62 @@ def train_sl(environment, controller, user, epochs, max_steps, do_training=True)
 
     return sl_losses, sl_reward_history, sl_reward_sum_history, performances, goals
 
+
+class TwoDProjection(gym.Wrapper):
+    def __init__(self, env):
+        super().__init__(env)
+        self.observation_space = gym.spaces.Dict({
+            "observation": self.observation_space["observation"],
+            "desired_goal": gym.spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float64),
+            "achieved_goal": gym.spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float64),
+        })
+        self.action_space = gym.spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float64)
+
+    @staticmethod
+    def _project_observation(observation):
+        observation["desired_goal"] = observation["desired_goal"][:2]
+        observation["achieved_goal"] = observation["achieved_goal"][:2]
+
+    def reset(self, **kwargs):
+        observation, info = self.env.reset(**kwargs)
+        self._project_observation(observation)
+        return observation, info
+
+    def step(self, action):
+        real_action = np.zeros(4)
+        real_action[:2] = action
+
+        observation, reward, terminated, truncated, info = self.env.step(real_action)
+        self._project_observation(observation)
+        return observation, reward, terminated, truncated, info
+
+
+class EnvironmentWithUser(gym.Wrapper):
+    """
+    This wrapper adds a user to the environment.
+
+    An action goes into the environment, the user observes the environment and returns some features, along with the
+    classical transition.
+    """
+
+    def __init__(self, env: gym.Env, user: MouseProportionalUser):
+        super().__init__(env)
+        self.user = user
+        self.observation_space = gym.spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float64)
+
+    def reset(self, **kwargs):
+        env_obs, env_info = self.env.reset(**kwargs)
+        user_observation, user_info = self.user.reset(env_obs, env_info)
+        return user_observation, user_info
+
+    def step(self, action):
+        observation, reward, terminated, truncated, info = self.env.step(action)
+        return self.user.step(observation, reward, terminated, truncated, info)
+
+
 def main():
     parser = argparse.ArgumentParser(prog='Adaptive HCI - Fetch')
-    
+
     parser.add_argument('--no-training', action='store_true')
     parser.add_argument('--model', default=None)
     args = parser.parse_args()
@@ -115,25 +156,23 @@ def main():
     do_training = not args.no_training
 
     max_steps = 100
-    total_timesteps = 10 #10_000
+    total_timesteps = 10  # 10_000
 
-    monitor_center_x, monitor_center_y = get_screen_center()
-    user = ProportionalUser(goal=1, middle_pixels=np.array([monitor_center_x, monitor_center_y]))
+    user = MouseProportionalUser()
 
-    environment = gym.make('FetchReachDense-v2', render_mode="human", max_episode_steps=100)
-    environment.observation_space = gym.spaces.Box(low=-1, high=1, shape=(2,))
+    # environment = gym.make('FetchReachDense-v2', render_mode="human", max_episode_steps=100)
+    environment = gym.make('FetchReachDense-v2', max_episode_steps=100)
+    environment = TwoDProjection(environment)
+    environment = EnvironmentWithUser(environment, user)
 
     controller = RLSLController(env=environment)
-
-    # TODO implement RL training
-    # initial_parameters = controller.policy.state_dict()
-    # train_rl(controller, total_timesteps)
 
     if args.model is not None:
         trained_parameters = torch.load(args.model)
         controller.policy.load_state_dict(trained_parameters)
 
-    sl_losses, sl_reward_history, sl_reward_sum_history, sl_avg_steps, goals = train_sl(environment, controller, user, total_timesteps, max_steps, do_training=do_training)
+    sl_losses, sl_reward_history, sl_reward_sum_history, sl_avg_steps, goals = train_sl(
+        environment, controller, total_timesteps, max_steps, do_training=do_training)
 
     results = {
         'sl_losses': sl_losses,
@@ -145,15 +184,7 @@ def main():
 
     with open('models/2d_fetch/results.pkl', 'wb') as f:
         pickle.dump(results, f)
-
-    # sl_reward_goal_dist_ratio = [r / abs(g.sum()) if not abs(g.sum()) == 0 else 0 for r, g in zip(sl_reward_sum_history, goals)]
-
-    # plot_and_mean(sl_avg_steps, "SL avg steps")
-    # plot_and_mean(sl_reward_goal_dist_ratio, "SL return / goal dist")
-    # plot_and_mean(sl_losses, "SL losses")
-
     print("done")
-    environment.close()
 
 
 if __name__ == '__main__':
