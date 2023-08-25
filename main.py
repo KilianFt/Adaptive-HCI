@@ -1,7 +1,7 @@
 import argparse
+import itertools
 import os
 import pickle
-import time
 
 import gymnasium as gym
 import numpy as np
@@ -9,10 +9,11 @@ import torch
 import tqdm
 
 from controllers import RLSLController
+from metrics import plot_and_mean
 from users import MouseProportionalUser
 
 
-def deterministic_rollout(environment, controller, max_steps):
+def deterministic_rollout(environment, controller):
     observation, info = environment.reset()
     observation = torch.tensor(observation).unsqueeze(0)
 
@@ -24,7 +25,7 @@ def deterministic_rollout(environment, controller, max_steps):
     optimal_actions = []
     rewards = []
 
-    for time_step in range(max_steps):
+    for time_step in itertools.count():
         action_mean = controller.deterministic_forward(observation)
         observation, reward, terminated, truncated, info = environment.step(action_mean.squeeze().detach().numpy())
 
@@ -43,8 +44,6 @@ def deterministic_rollout(environment, controller, max_steps):
         if terminated or truncated:
             break
 
-        time.sleep(.1)
-
     user_signals = torch.stack(user_signals)
     action_means = torch.stack(action_means)
     optimal_actions = torch.tensor(optimal_actions)
@@ -59,7 +58,7 @@ def train_rl(controller: RLSLController, epochs):
     return learner
 
 
-def train_sl(environment, controller, epochs, max_steps, do_training=True):
+def train_sl(environment, controller, epochs, do_training=True):
     sl_reward_history = []
     sl_reward_sum_history = []
     sl_losses = []
@@ -75,13 +74,13 @@ def train_sl(environment, controller, epochs, max_steps, do_training=True):
 
     for epoch in tqdm.trange(epochs):
         states, user_signals, actions, optimal_actions, rewards, performance, goal = deterministic_rollout(
-            environment, controller, max_steps)
+            environment, controller)
 
         if do_training:
             loss = controller.sl_update(user_signals, optimal_actions)
             if epoch % checkpoint_every == 0:
                 parameters = controller.policy.state_dict()
-                torch.save(parameters, 'models/2d_fetch/epoch_' + str(epoch) + '.pt')
+                torch.save(parameters, f'models/2d_fetch/epoch_{str(epoch)}.pt')
         else:
             loss = None
 
@@ -145,6 +144,10 @@ class EnvironmentWithUser(gym.Wrapper):
         observation, reward, terminated, truncated, info = self.env.step(action)
         return self.user.step(observation, reward, terminated, truncated, info)
 
+    def render(self):
+        self.user.think()
+        return self.env.render()
+
 
 def main():
     parser = argparse.ArgumentParser(prog='Adaptive HCI - Fetch')
@@ -156,12 +159,12 @@ def main():
     do_training = not args.no_training
 
     max_steps = 100
-    total_timesteps = 10  # 10_000
+    total_timesteps = 10_000
 
-    user = MouseProportionalUser()
+    user = MouseProportionalUser(simulate_user=True)
 
     # environment = gym.make('FetchReachDense-v2', render_mode="human", max_episode_steps=100)
-    environment = gym.make('FetchReachDense-v2', max_episode_steps=100)
+    environment = gym.make('FetchReachDense-v2', max_episode_steps=max_steps)
     environment = TwoDProjection(environment)
     environment = EnvironmentWithUser(environment, user)
 
@@ -172,7 +175,7 @@ def main():
         controller.policy.load_state_dict(trained_parameters)
 
     sl_losses, sl_reward_history, sl_reward_sum_history, sl_avg_steps, goals = train_sl(
-        environment, controller, total_timesteps, max_steps, do_training=do_training)
+        environment, controller, total_timesteps, do_training=do_training)
 
     results = {
         'sl_losses': sl_losses,
@@ -184,8 +187,33 @@ def main():
 
     with open('models/2d_fetch/results.pkl', 'wb') as f:
         pickle.dump(results, f)
+
+    sl_reward_goal_dist_ratio = [r / abs(g.sum()) if not abs(g.sum()) == 0 else 0 for r, g in
+                                 zip(sl_reward_sum_history, goals)]
+
+    plot_and_mean(sl_avg_steps, "SL avg steps")
+    plot_and_mean(sl_reward_goal_dist_ratio, "SL return / goal dist")
+    plot_and_mean(sl_losses, "SL losses")
+
     print("done")
 
 
 if __name__ == '__main__':
+    # with open('models/2d_fetch/results.pkl', 'rb') as f:
+    #     results = pickle.load(f)
+
+    # sl_losses = results['sl_losses']
+    # sl_reward_history = results['sl_reward_history']
+    # sl_reward_sum_history = results['sl_reward_sum_history']
+    # sl_avg_steps = results['sl_avg_steps']
+    # goals = results['goals']
+
+    # sl_reward_goal_dist_ratio = [r / abs(g.sum()) if not abs(g.sum()) == 0 else 0 for r, g in
+    #                              zip(sl_reward_sum_history, goals)]
+
+    # plot_and_mean(sl_avg_steps, "SL avg steps")
+    # plot_and_mean(sl_reward_goal_dist_ratio, "SL return / goal dist")
+    # plot_and_mean(sl_losses, "SL losses")
+
+    # print("done")
     main()

@@ -1,3 +1,5 @@
+import time
+
 import numpy as np
 import pyautogui
 from screeninfo import get_monitors
@@ -11,10 +13,11 @@ def get_screen_center():
 
 
 class MouseProportionalUser:
-    def __init__(self):
+    def __init__(self, simulate_user=False):
         monitor_center_x, monitor_center_y = get_screen_center()
         self.middle_pixels = np.array([monitor_center_x, monitor_center_y])
         self.goal = None
+        self.simulate_user = simulate_user
 
     def reset(self, observation, info):
         self.goal = observation["desired_goal"]
@@ -34,9 +37,16 @@ class MouseProportionalUser:
 
         return signal, reward, terminated, truncated, info
 
+    @staticmethod
+    def think():
+        time.sleep(0.1)
+
     def _obs_to_features(self, _observation):
-        mouse_pos = np.array(pyautogui.position())
-        signal = (mouse_pos - self.middle_pixels) / self.middle_pixels
+        if self.simulate_user:
+            signal = self.goal - _observation["achieved_goal"]
+        else:
+            mouse_pos = np.array(pyautogui.position())
+            signal = (mouse_pos - self.middle_pixels) / self.middle_pixels
         return signal
 
 
