@@ -46,20 +46,21 @@ class Environment(gym.Env):
         return gym.spaces.Box(low=-1, high=1, shape=(2,))
 
 
-class TwoDProjection(gym.Wrapper):
-    def __init__(self, env):
+class XDProjection(gym.Wrapper):
+    def __init__(self, env, n_dof):
         super().__init__(env)
+        self.n_dof = n_dof
         self.observation_space = gym.spaces.Dict({
-            "observation": self.observation_space["observation"],
-            "desired_goal": gym.spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float64),
-            "achieved_goal": gym.spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float64),
+            "observation": gym.spaces.Box(low=-1, high=1, shape=(self.n_dof,), dtype=np.float64),
+            "desired_goal": gym.spaces.Box(low=-1, high=1, shape=(self.n_dof,), dtype=np.float64),
+            "achieved_goal": gym.spaces.Box(low=-1, high=1, shape=(self.n_dof,), dtype=np.float64),
         })
-        self.action_space = gym.spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float64)
+        self.action_space = gym.spaces.Box(low=-1, high=1, shape=(self.n_dof,), dtype=np.float64)
 
-    @staticmethod
-    def _project_observation(observation):
-        observation["desired_goal"] = observation["desired_goal"][:2]
-        observation["achieved_goal"] = observation["achieved_goal"][:2]
+    # @staticmethod
+    def _project_observation(self, observation):
+        observation["desired_goal"] = observation["desired_goal"][:self.n_dof]
+        observation["achieved_goal"] = observation["achieved_goal"][:self.n_dof]
 
     def reset(self, **kwargs):
         observation, info = self.env.reset(**kwargs)
@@ -68,11 +69,12 @@ class TwoDProjection(gym.Wrapper):
 
     def step(self, action):
         mujoco_aciton = np.zeros(4)
-        mujoco_aciton[:2] = action
+        mujoco_aciton[:self.n_dof] = action
         old_obs = self.env.unwrapped._get_obs()
         # 0.05 is the scaling factor of the environment
-        optimal_z = (old_obs["desired_goal"][2] - old_obs["achieved_goal"][2]) / 0.05
-        mujoco_aciton[2] = optimal_z
+        for dof_idx in range(self.n_dof, 3):
+            optimal_pos = (old_obs["desired_goal"][dof_idx] - old_obs["achieved_goal"][dof_idx]) / 0.05
+            mujoco_aciton[dof_idx] = optimal_pos
 
         observation, reward, terminated, truncated, info = self.env.step(mujoco_aciton)
         self._project_observation(observation)
@@ -93,7 +95,7 @@ class EnvironmentWithUser(gym.Wrapper):
     def __init__(self, env: gym.Env, user: MouseProportionalUser):
         super().__init__(env)
         self.user = user
-        self.observation_space = gym.spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float64)
+        self.observation_space = gym.spaces.Box(low=-1, high=1, shape=(self.env.n_dof,), dtype=np.float64)
 
     def reset(self, **kwargs):
         env_obs, env_info = self.env.reset(**kwargs)

@@ -9,7 +9,7 @@ import torch
 import tqdm
 
 from controllers import RLSLController
-from environment import TwoDProjection, EnvironmentWithUser
+from environment import XDProjection, EnvironmentWithUser
 from metrics import plot_and_mean
 from users import MouseProportionalUser
 
@@ -106,12 +106,12 @@ def main():
 
     max_steps = 100
     total_timesteps = 100
+    n_dof = 2
 
     user = MouseProportionalUser(simulate_user=True)
 
-    # environment = gym.make('FetchReachDense-v2', render_mode="human", max_episode_steps=100)
     environment = gym.make('FetchReachDense-v2', max_episode_steps=max_steps, render_mode="human")
-    environment = TwoDProjection(environment)
+    environment = XDProjection(environment, n_dof = n_dof)
     environment = EnvironmentWithUser(environment, user)
 
     controller = RLSLController(env=environment)
