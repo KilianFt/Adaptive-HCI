@@ -50,6 +50,7 @@ class XDProjection(gym.Wrapper):
     def __init__(self, env, n_dof):
         super().__init__(env)
         self.n_dof = n_dof
+        assert (0 < n_dof < 4), "Number of DOF has to be in the range 1-3"
         self.observation_space = gym.spaces.Dict({
             "observation": gym.spaces.Box(low=-1, high=1, shape=(self.n_dof,), dtype=np.float64),
             "desired_goal": gym.spaces.Box(low=-1, high=1, shape=(self.n_dof,), dtype=np.float64),
