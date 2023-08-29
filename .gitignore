@@ -1,0 +1,9 @@
+__pycache__/
+wandb/
+tmp/
+models/
+*.pkl
+*.pt
+*.png
+*.jpg
+/venv/
