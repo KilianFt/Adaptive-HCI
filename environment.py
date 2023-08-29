@@ -1,6 +1,7 @@
-import gym
+import gymnasium as gym
 import numpy as np
-import torch
+
+from users import MouseProportionalUser
 
 
 class Environment(gym.Env):
@@ -43,3 +44,66 @@ class Environment(gym.Env):
     @property
     def action_space(self):
         return gym.spaces.Box(low=-1, high=1, shape=(2,))
+
+
+class TwoDProjection(gym.Wrapper):
+    def __init__(self, env):
+        super().__init__(env)
+        self.observation_space = gym.spaces.Dict({
+            "observation": self.observation_space["observation"],
+            "desired_goal": gym.spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float64),
+            "achieved_goal": gym.spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float64),
+        })
+        self.action_space = gym.spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float64)
+
+    @staticmethod
+    def _project_observation(observation):
+        observation["desired_goal"] = observation["desired_goal"][:2]
+        observation["achieved_goal"] = observation["achieved_goal"][:2]
+
+    def reset(self, **kwargs):
+        observation, info = self.env.reset(**kwargs)
+        self._project_observation(observation)
+        return observation, info
+
+    def step(self, action):
+        mujoco_aciton = np.zeros(4)
+        mujoco_aciton[:2] = action
+        old_obs = self.env.unwrapped._get_obs()
+        # 0.05 is the scaling factor of the environment
+        optimal_z = (old_obs["desired_goal"][2] - old_obs["achieved_goal"][2]) / 0.05
+        mujoco_aciton[2] = optimal_z
+
+        observation, reward, terminated, truncated, info = self.env.step(mujoco_aciton)
+        self._project_observation(observation)
+        if float(reward) > -0.005:
+            terminated = True
+
+        return observation, reward, terminated, truncated, info
+
+
+class EnvironmentWithUser(gym.Wrapper):
+    """
+    This wrapper adds a user to the environment.
+
+    An action goes into the environment, the user observes the environment and returns some features, along with the
+    classical transition.
+    """
+
+    def __init__(self, env: gym.Env, user: MouseProportionalUser):
+        super().__init__(env)
+        self.user = user
+        self.observation_space = gym.spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float64)
+
+    def reset(self, **kwargs):
+        env_obs, env_info = self.env.reset(**kwargs)
+        user_observation, user_info = self.user.reset(env_obs, env_info)
+        return user_observation, user_info
+
+    def step(self, action):
+        observation, reward, terminated, truncated, info = self.env.step(action)
+        return self.user.step(observation, reward, terminated, truncated, info)
+
+    def render(self):
+        self.user.think()
+        return self.env.render()
