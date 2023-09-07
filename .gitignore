@@ -1,3 +1,5 @@
+/venv/
+datasets/
 __pycache__/
 wandb/
 tmp/
@@ -6,4 +8,7 @@ models/
 *.pt
 *.png
 *.jpg
-/venv/
+*.pyc
+*.DS_STORE
+
+
