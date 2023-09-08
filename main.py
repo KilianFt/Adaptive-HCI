@@ -110,8 +110,9 @@ def main():
 
     user = users.FrankensteinProportionalUser()
 
+    environment = gym.make('FetchReachDense-v2', max_episode_steps=max_steps)  # , render_mode="human")
     environment = gym.make('FetchReachDense-v2', max_episode_steps=max_steps, render_mode="human")
-    environment = XDProjection(environment, n_dof = n_dof)
+    environment = XDProjection(environment, n_dof=n_dof)
     environment = EnvironmentWithUser(environment, user)
 
     controller = RLSLController(env=environment)

@@ -7,6 +7,14 @@ import pyautogui
 import torch.nn
 from screeninfo import get_monitors
 
+class_name = [
+    "rest",
+    "index_flexion",
+    "index_extension",
+    "middle_flexion",
+    "middle_extension",
+]
+
 
 def get_screen_center():
     monitor = get_monitors()[0]  # Assuming the first monitor is the primary
@@ -86,22 +94,50 @@ class MouseProportionalUser(BaseUser):
 class FrankensteinProportionalUser(BaseUser):
     def __init__(self):
         self.user_policy = ProportionalUserPolicy()
-        self.features_size = features_size = 3
-        self.upper_bound = upper_bound = np.float32(1)
-        self.lower_bound = lower_bound = np.float32(-1)
-        dataset_size = 100
-        left_bias, right_bias, up_bias, down_bias = np.zeros((4, features_size))
 
-        self.features_dataset = {
-            "left": np.random.uniform(lower_bound, upper_bound, size=(dataset_size, features_size)) + left_bias,
-            "right": np.random.uniform(lower_bound, upper_bound, size=(dataset_size, features_size)) + right_bias,
-            "up": np.random.uniform(lower_bound, upper_bound, size=(dataset_size, features_size)) + up_bias,
-            "down": np.random.uniform(lower_bound, upper_bound, size=(dataset_size, features_size)) + down_bias,
-        }
+        # Load files from ninapro/*.mat, use the mat extension
+        import scipy.io
+        mat = scipy.io.loadmat('ninapro/DB1_s1/S1_A1_E1.mat')
+
+        # Emg (10 columns): sEMG signal.
+        # Columns 1-8 are the electrodes equally spaced around the forearm at the height of the radio humeral joint.
+        # Columns 9 and 10 contain signals from the main activity spot of the muscles flexor and extensor digitorum superficialis.
+        x = mat['emg']
+        y = mat['restimulus'].squeeze(1)
+        # class_hist = np.histogram(y, bins=np.arange(0, max(y) + 1))[0]
+        # plt.bar(np.arange(0, max(y)), class_hist)
+        # plt.show()
+
+        self.features_size = x.shape[1]
+        self.upper_bound = np.max(x, axis=0)
+        self.lower_bound = np.min(x, axis=0)
+
+        # Restimulus (1 column): the class of the recorded gesture.
+        # 0: rest
+        # 1: index finger flexion
+        # 2: index extension
+        # 3: middle finger flexion
+        # 4: middle finger extension
+        # 5: ring finger flexion
+        # 6: ring finger extension
+        # 7: little finger flexion
+        # 8: little finger extension
+        # 9: thumb adduction
+        # 10: thumb abduction
+        # 11: thumb flexion
+        # 12: thumb extension
+
+        assert mat["exercise"] == 1
+        assert mat["subject"] == 1
+
+        self.features_dataset = {}
+        for class_idx in np.unique(y):
+            self.features_dataset[class_idx] = x[y == class_idx]
 
     @property
     def observation_space(self):
-        return gym.spaces.Box(low=-1, high=1, shape=(self.features_size,), dtype=np.float32)
+        return gym.spaces.Box(low=self.lower_bound, high=self.upper_bound, shape=(self.features_size,),
+                              dtype=np.float32)
 
     def reset(self, observation, info):
         info["original_observation"] = observation
@@ -119,16 +155,24 @@ class FrankensteinProportionalUser(BaseUser):
         return user_features, reward, terminated, truncated, info
 
     def action_to_features(self, user_action):
-        sample_idx = np.random.randint(0, 100)
         if user_action[0] > 0:
-            class_dataset = self.features_dataset["right"]
+            class_dataset = self.features_dataset[1]
+            a = 1
         elif user_action[0] < 0:
-            class_dataset = self.features_dataset["left"]
+            class_dataset = self.features_dataset[2]
+            a = 2
         elif user_action[1] > 0:
-            class_dataset = self.features_dataset["up"]
+            class_dataset = self.features_dataset[3]
+            a = 3
+
         elif user_action[1] < 0:
-            class_dataset = self.features_dataset["down"]
+            class_dataset = self.features_dataset[4]
+            a = 4
+
         else:
             raise ValueError("User action is zero!")
+        sample_idx = np.random.randint(0, 100)  # len(class_dataset))
+        sample_idx = 0
         user_features = class_dataset[sample_idx]
+        # user_features = np.eye(self.features_size)[a - 1]
         return user_features
