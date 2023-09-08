@@ -157,22 +157,17 @@ class FrankensteinProportionalUser(BaseUser):
     def action_to_features(self, user_action):
         if user_action[0] > 0:
             class_dataset = self.features_dataset[1]
-            a = 1
         elif user_action[0] < 0:
             class_dataset = self.features_dataset[2]
-            a = 2
         elif user_action[1] > 0:
             class_dataset = self.features_dataset[3]
-            a = 3
 
         elif user_action[1] < 0:
             class_dataset = self.features_dataset[4]
-            a = 4
 
         else:
             raise ValueError("User action is zero!")
-        sample_idx = np.random.randint(0, 100)  # len(class_dataset))
-        sample_idx = 0
+        sample_idx = np.random.randint(0, len(class_dataset))
         user_features = class_dataset[sample_idx]
         # user_features = np.eye(self.features_size)[a - 1]
         return user_features
