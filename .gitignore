@@ -1,5 +1,6 @@
 /venv/
 datasets/
+models/
 __pycache__/
 wandb/
 tmp/
