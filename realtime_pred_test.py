@@ -50,7 +50,7 @@ if __name__ == "__main__":
     p = multiprocessing.Process(target=worker, args=(q,))
     p.start()
 
-    model = torch.load('pretained_vit_2.pt').to(device)
+    model = torch.load('models/pretained_vit.pt').to(device)
 
     move_map = {
         0: 'Neutral', 
