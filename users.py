@@ -7,6 +7,8 @@ import pyautogui
 import torch.nn
 from screeninfo import get_monitors
 
+import datasets
+
 class_name = [
     "rest",
     "index_flexion",
@@ -94,50 +96,14 @@ class MouseProportionalUser(BaseUser):
 class FrankensteinProportionalUser(BaseUser):
     def __init__(self):
         self.user_policy = ProportionalUserPolicy()
-
-        # Load files from ninapro/*.mat, use the mat extension
-        import scipy.io
-        mat = scipy.io.loadmat('ninapro/DB1_s1/S1_A1_E1.mat')
-
-        # Emg (10 columns): sEMG signal.
-        # Columns 1-8 are the electrodes equally spaced around the forearm at the height of the radio humeral joint.
-        # Columns 9 and 10 contain signals from the main activity spot of the muscles flexor and extensor digitorum superficialis.
-        x = mat['emg']
-        y = mat['restimulus'].squeeze(1)
-        # class_hist = np.histogram(y, bins=np.arange(0, max(y) + 1))[0]
-        # plt.bar(np.arange(0, max(y)), class_hist)
-        # plt.show()
-
-        self.features_size = x.shape[1]
-        self.upper_bound = np.max(x, axis=0)
-        self.lower_bound = np.min(x, axis=0)
-
-        # Restimulus (1 column): the class of the recorded gesture.
-        # 0: rest
-        # 1: index finger flexion
-        # 2: index extension
-        # 3: middle finger flexion
-        # 4: middle finger extension
-        # 5: ring finger flexion
-        # 6: ring finger extension
-        # 7: little finger flexion
-        # 8: little finger extension
-        # 9: thumb adduction
-        # 10: thumb abduction
-        # 11: thumb flexion
-        # 12: thumb extension
-
-        assert mat["exercise"] == 1
-        assert mat["subject"] == 1
-
-        self.features_dataset = {}
-        for class_idx in np.unique(y):
-            self.features_dataset[class_idx] = x[y == class_idx]
+        self.dataset = datasets.NinaPro1()
+        ds = self.dataset
+        self.observation_space_ = gym.spaces.Box(
+            low=ds.lower_bound, high=ds.upper_bound, shape=(ds.features_size,), dtype=np.float32)
 
     @property
     def observation_space(self):
-        return gym.spaces.Box(low=self.lower_bound, high=self.upper_bound, shape=(self.features_size,),
-                              dtype=np.float32)
+        return self.observation_space_
 
     def reset(self, observation, info):
         info["original_observation"] = observation
@@ -145,10 +111,12 @@ class FrankensteinProportionalUser(BaseUser):
         user_features = self.action_to_features(user_action)
         return user_features, info
 
+    def think(self) -> None:
+        return
+
     def step(self, observation, reward, terminated, truncated, info):
         user_action = self.user_policy(observation)
         user_features = self.action_to_features(user_action)
-
         info["original_observation"] = observation
         info["optimal_action"] = user_action
 
@@ -156,18 +124,16 @@ class FrankensteinProportionalUser(BaseUser):
 
     def action_to_features(self, user_action):
         if user_action[0] > 0:
-            class_dataset = self.features_dataset[1]
+            class_dataset = self.dataset[1]
         elif user_action[0] < 0:
-            class_dataset = self.features_dataset[2]
+            class_dataset = self.dataset[2]
         elif user_action[1] > 0:
-            class_dataset = self.features_dataset[3]
-
+            class_dataset = self.dataset[3]
         elif user_action[1] < 0:
-            class_dataset = self.features_dataset[4]
-
+            class_dataset = self.dataset[4]
         else:
             raise ValueError("User action is zero!")
+
         sample_idx = np.random.randint(0, len(class_dataset))
-        user_features = class_dataset[sample_idx]
-        # user_features = np.eye(self.features_size)[a - 1]
+        user_features, _target = class_dataset[sample_idx]
         return user_features
