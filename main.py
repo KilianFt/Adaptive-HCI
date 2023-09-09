@@ -108,7 +108,8 @@ def main():
     total_timesteps = 100
     n_dof = 2
 
-    user = users.FrankensteinProportionalUser()
+    # user = users.FrankensteinProportionalUser()
+    user = users.EMGProportionalUser()
 
     environment = gym.make('FetchReachDense-v2', max_episode_steps=max_steps)  # , render_mode="human")
     environment = gym.make('FetchReachDense-v2', max_episode_steps=max_steps, render_mode="human")
