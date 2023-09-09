@@ -19,11 +19,12 @@ device = 'mps'
 emg_min = -128
 emg_max = 127
 
+
 # ------------ Myo Setup ---------------
 q = multiprocessing.Queue()
 
 def worker(q):
-	m = Myo(mode=emg_mode.PREPROCESSED)
+	m = Myo(mode=emg_mode.RAW)
 	m.connect()
 	
 	def add_to_queue(emg, movement):
@@ -62,7 +63,6 @@ if __name__ == "__main__":
         3: 'Ulnar Deviation', 
         4: 'Wrist Extension',
         }
-
 
     emg_buffer = []
     # initialize as -150 cause first window needs 200 samples
