@@ -54,14 +54,14 @@ if __name__ == "__main__":
     p = multiprocessing.Process(target=worker, args=(q,))
     p.start()
 
-    model = torch.load('models/pretained_vit.pt').to(device)
+    model = torch.load('models/pretrained_vit_2dof.pt').to(device)
 
     move_map = {
         0: 'Neutral', 
-        1: 'Radial Deviation', 
-        2: 'Wrist Flexion', 
-        3: 'Ulnar Deviation', 
-        4: 'Wrist Extension',
+        1: 'Radial Deviation', # up
+        2: 'Wrist Flexion', # left
+        3: 'Ulnar Deviation', # down
+        4: 'Wrist Extension', # right
         }
 
     emg_buffer = []
@@ -85,8 +85,8 @@ if __name__ == "__main__":
             emg_window_tensor = torch.from_numpy(emg_window).unsqueeze(0).unsqueeze(0).to(device)
             emg_window_tensor.swapaxes_(2, 3)
             predictions = model(emg_window_tensor)
-            pred_idx = torch.argmax(predictions).cpu().item()
-            print(move_map[pred_idx])
+            # pred_idx = torch.argmax(predictions).cpu().item()
+            print(predictions.cpu().detach().numpy()[0])
 
             current_time = time.time()
             dt_windows = current_time - last_time_window

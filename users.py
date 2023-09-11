@@ -157,8 +157,8 @@ class EMGProportionalUser(BaseUser):
         self.n_new_samples = -overlap
 
         self.q = multiprocessing.Queue()
-        p = multiprocessing.Process(target=self.worker, args=(self.q,))
-        p.start()
+        self.p = multiprocessing.Process(target=self.worker, args=(self.q,))
+        self.p.start()
 
         self.observation_space_ = gym.spaces.Box(
             low=-1., high=1., shape=(8,200), dtype=np.float32)
@@ -198,6 +198,7 @@ class EMGProportionalUser(BaseUser):
                     self.n_new_samples += 1
 
             current_window = np.array(self.emg_buffer[-200:], dtype=np.float32)
+            self.n_new_samples = 0
             return current_window
 
         except KeyboardInterrupt:
@@ -223,3 +224,7 @@ class EMGProportionalUser(BaseUser):
         info["optimal_action"] = user_action
 
         return user_features, reward, terminated, truncated, info
+    
+    def __del__(self):
+        self.p.terminate()
+        self.p.join()

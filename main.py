@@ -8,7 +8,7 @@ import numpy as np
 import torch
 import tqdm
 
-from controllers import RLSLController
+from controllers import RLSLController, SLController
 from environment import XDProjection, EnvironmentWithUser
 from metrics import plot_and_mean
 import users
@@ -105,7 +105,7 @@ def main():
     do_training = not args.no_training
 
     max_steps = 100
-    total_timesteps = 100
+    total_timesteps = 10
     n_dof = 2
 
     # user = users.FrankensteinProportionalUser()
@@ -116,7 +116,8 @@ def main():
     environment = XDProjection(environment, n_dof=n_dof)
     environment = EnvironmentWithUser(environment, user)
 
-    controller = RLSLController(env=environment)
+    # controller = RLSLController(env=environment)
+    controller = SLController()
 
     if args.model is not None:
         trained_parameters = torch.load(args.model)
