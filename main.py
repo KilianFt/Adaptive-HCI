@@ -14,6 +14,23 @@ from metrics import plot_and_mean
 import users
 
 
+def onehot_to_dof(onehot_vector):
+    label_to_dof = {
+            0: [0, 0],
+            1: [0, -1], # left
+            2: [-1, 0], # back
+            3: [0, 1], # right
+            4: [1, 0], # front
+        }
+    dof_cmd = np.zeros(2)
+    for class_idx, is_active in enumerate(onehot_vector):
+        if bool(is_active):
+            dof_cmd += np.array(label_to_dof[class_idx])
+
+    dof_cmd = dof_cmd / np.linalg.norm(dof_cmd) if np.linalg.norm(dof_cmd) > 0 else np.zeros(2)
+
+    return dof_cmd
+
 def deterministic_rollout(environment, controller):
     observation, info = environment.reset()
     observation = torch.tensor(observation).unsqueeze(0)
@@ -28,7 +45,11 @@ def deterministic_rollout(environment, controller):
 
     for time_step in itertools.count():
         action_mean = controller.deterministic_forward(observation)
-        action = action_mean.squeeze().detach().numpy()
+        predictions = action_mean.cpu().detach().squeeze().numpy()
+        predicted_labels = np.zeros_like(predictions)
+        predicted_labels[predictions > 0.5] = 1
+        action = onehot_to_dof(predicted_labels)
+
         observation, reward, terminated, truncated, info = environment.step(action)
 
         observation = torch.tensor(observation).unsqueeze(0)

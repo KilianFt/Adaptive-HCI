@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from stable_baselines3 import PPO
 
@@ -30,7 +31,7 @@ class RLSLController(PPO):
 
 class SLController():
     def __init__(self):
-        self.policy = torch.load('models/pretrained_vit_2dof.pt')
+        self.policy = torch.load('models/pretrained_vit_onehot_mad.pt')
         self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=1e-3)
         self.criterion = torch.nn.MSELoss()
         self.device = 'cpu'
@@ -38,8 +39,8 @@ class SLController():
     def deterministic_forward(self, emg_window):
         emg_window_tensor = emg_window.unsqueeze(0).to(self.device)
         emg_window_tensor.swapaxes_(2, 3)
-        predictions = self.policy(emg_window_tensor)
-        return predictions.cpu()
+        outputs = self.policy(emg_window_tensor)
+        return outputs
 
     def sl_update(self, states, optimal_actions):
         self.policy.train()

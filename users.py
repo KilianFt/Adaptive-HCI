@@ -32,12 +32,22 @@ class ProportionalUserPolicy(torch.nn.Module):
     def forward(observation):
         signal = observation["desired_goal"] - observation["achieved_goal"]
         signal = signal.astype(np.float32)
-        # only move in one direction at a time
-        if np.abs(signal[0]) > np.abs(signal[1]):
-            signal[1] = 0
-        else:
-            signal[0] = 0
-        return signal
+
+        # create onehot signal
+        onehot_vector = np.zeros(5, dtype=np.float32)
+        for i, single_signal in enumerate(signal):
+            if np.abs(single_signal) > 0.005:
+                if single_signal > 0:
+                    if i == 0:
+                        onehot_vector[4] = 1.
+                    elif i == 1:
+                        onehot_vector[3] = 1.
+                else:
+                    if i == 0:
+                        onehot_vector[2] = 1.
+                    elif i == 1:
+                        onehot_vector[1] = 1.
+        return onehot_vector
 
 
 class BaseUser:

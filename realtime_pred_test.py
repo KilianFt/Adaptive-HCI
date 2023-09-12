@@ -84,9 +84,16 @@ if __name__ == "__main__":
 
             emg_window_tensor = torch.from_numpy(emg_window).unsqueeze(0).unsqueeze(0).to(device)
             emg_window_tensor.swapaxes_(2, 3)
-            predictions = model(emg_window_tensor)
-            # pred_idx = torch.argmax(predictions).cpu().item()
-            print(predictions.cpu().detach().numpy()[0])
+            outputs = model(emg_window_tensor)
+
+            predictions = outputs.cpu().squeeze().numpy()
+            predicted_labels = np.zeros_like(predictions)
+            predicted_labels[predictions > 0.5] = 1
+
+            pred_idx = torch.argmax(outputs).cpu().item()
+            print(move_map[pred_idx])
+            print(predicted_labels)
+            # print(predictions.cpu().detach().numpy()[0])
 
             current_time = time.time()
             dt_windows = current_time - last_time_window
