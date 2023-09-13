@@ -62,7 +62,7 @@ class MouseProportionalUser(BaseUser):
     def __init__(self, simulate_user=False):
         monitor_center_x, monitor_center_y = get_screen_center()
         self.middle_pixels = np.array([monitor_center_x, monitor_center_y])
-        # TODO: split the user in two classes based on this
+        # TODO: split the user in two classes, one that simulates the user and one that uses the mouse
         self.simulate_user = simulate_user
         self.user_policy = ProportionalUserPolicy()
 
