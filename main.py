@@ -11,7 +11,7 @@ import tqdm
 from controllers import RLSLController
 from environment import XDProjection, EnvironmentWithUser
 from metrics import plot_and_mean
-from users import MouseProportionalUser
+import users
 
 
 def deterministic_rollout(environment, controller):
@@ -108,10 +108,11 @@ def main():
     total_timesteps = 100
     n_dof = 2
 
-    user = MouseProportionalUser(simulate_user=True)
+    user = users.FrankensteinProportionalUser()
 
+    environment = gym.make('FetchReachDense-v2', max_episode_steps=max_steps)  # , render_mode="human")
     environment = gym.make('FetchReachDense-v2', max_episode_steps=max_steps, render_mode="human")
-    environment = XDProjection(environment, n_dof = n_dof)
+    environment = XDProjection(environment, n_dof=n_dof)
     environment = EnvironmentWithUser(environment, user)
 
     controller = RLSLController(env=environment)

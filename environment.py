@@ -1,7 +1,7 @@
 import gymnasium as gym
 import numpy as np
 
-from users import MouseProportionalUser
+import users
 
 
 class Environment(gym.Env):
@@ -93,10 +93,10 @@ class EnvironmentWithUser(gym.Wrapper):
     classical transition.
     """
 
-    def __init__(self, env: gym.Env, user: MouseProportionalUser):
+    def __init__(self, env: gym.Env, user: users.BaseUser):
         super().__init__(env)
         self.user = user
-        self.observation_space = gym.spaces.Box(low=-1, high=1, shape=(self.env.n_dof,), dtype=np.float64)
+        self.observation_space = user.observation_space
 
     def reset(self, **kwargs):
         env_obs, env_info = self.env.reset(**kwargs)
