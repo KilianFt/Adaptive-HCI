@@ -132,7 +132,7 @@ class FrankensteinProportionalUser(BaseUser):
         elif user_action[1] < 0:
             class_dataset = self.dataset[4]
         else:
-            raise ValueError("User action is zero!")
+            raise ValueError("User action is zero, this should happen only when the episode is terminated")
 
         sample_idx = np.random.randint(0, len(class_dataset))
         user_features, _target = class_dataset[sample_idx]

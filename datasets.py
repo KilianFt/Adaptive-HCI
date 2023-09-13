@@ -22,7 +22,11 @@ gesture_names = [
 class NinaPro1(data.Dataset[data.TensorDataset]):
     def __init__(self):
         import scipy.io
-        mat = scipy.io.loadmat('ninapro/DB1_s1/S1_A1_E1.mat')
+        try:
+            mat = scipy.io.loadmat('ninapro/DB1_s1/S1_A1_E1.mat')
+        except FileNotFoundError:
+            raise FileNotFoundError("Please download the NinaPro dataset from https://zenodo.org/record/1000116 and "
+                                    "extract it into the 'ninapro' folder")
 
         x = mat['emg']
         y = mat['restimulus'].squeeze(1)
