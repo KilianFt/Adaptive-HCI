@@ -131,6 +131,7 @@ def main():
     max_steps = 100
     total_timesteps = 10
     n_dof = 2
+    lr = 1e-3
     device = 'cpu'
 
     # user = users.FrankensteinProportionalUser()
@@ -142,7 +143,7 @@ def main():
     environment = EnvironmentWithUser(environment, user)
 
     # controller = RLSLController(env=environment)
-    controller = SLOnlyController(args.model, device=device)
+    controller = SLOnlyController(args.model, device=device, lr=lr)
 
     sl_losses, sl_reward_history, sl_reward_sum_history, sl_avg_steps, goals = train_sl(
         environment, controller, total_timesteps, do_training=do_training)
