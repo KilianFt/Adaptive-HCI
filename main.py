@@ -8,26 +8,29 @@ import numpy as np
 import torch
 import tqdm
 
-from controllers import RLSLController, SLController
+from controllers import RLSLController, SLOnlyController
 from environment import XDProjection, EnvironmentWithUser
 from metrics import plot_and_mean
 import users
 
 
 def onehot_to_dof(onehot_vector):
-    label_to_dof = {
-            0: [0, 0],
-            1: [0, -1], # left
-            2: [-1, 0], # back
-            3: [0, 1], # right
-            4: [1, 0], # front
-        }
-    dof_cmd = np.zeros(2)
-    for class_idx, is_active in enumerate(onehot_vector):
-        if bool(is_active):
-            dof_cmd += np.array(label_to_dof[class_idx])
-
-    dof_cmd = dof_cmd / np.linalg.norm(dof_cmd) if np.linalg.norm(dof_cmd) > 0 else np.zeros(2)
+    onehot_vector = np.array(onehot_vector, dtype=float)
+    label_to_dof = np.array([
+        [0, 0],
+        [0, -1],  # left
+        [-1, 0],  # back
+        [0, 1],   # right
+        [1, 0],   # front
+    ])
+    
+    dof_cmd = np.dot(onehot_vector, label_to_dof)
+    
+    norm = np.linalg.norm(dof_cmd)
+    if norm > 0:
+        dof_cmd /= norm
+    else:
+        dof_cmd = np.zeros(2)
 
     return dof_cmd
 
@@ -128,6 +131,7 @@ def main():
     max_steps = 100
     total_timesteps = 10
     n_dof = 2
+    device = 'cpu'
 
     # user = users.FrankensteinProportionalUser()
     user = users.EMGProportionalUser()
@@ -138,11 +142,7 @@ def main():
     environment = EnvironmentWithUser(environment, user)
 
     # controller = RLSLController(env=environment)
-    controller = SLController()
-
-    if args.model is not None:
-        trained_parameters = torch.load(args.model)
-        controller.policy.load_state_dict(trained_parameters)
+    controller = SLOnlyController(args.model, device=device)
 
     sl_losses, sl_reward_history, sl_reward_sum_history, sl_avg_steps, goals = train_sl(
         environment, controller, total_timesteps, do_training=do_training)

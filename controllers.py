@@ -29,12 +29,18 @@ class RLSLController(PPO):
         self.policy.optimizer.step()
         return loss.item()
 
-class SLController():
-    def __init__(self):
-        self.policy = torch.load('models/pretrained_vit_onehot_mad.pt')
-        self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=1e-3)
+class SLOnlyController():
+    def __init__(self, model_path, device='cpu', lr=1e-3):
+        self.device = device
+
+        if model_path is not None:
+            self.policy = torch.load(model_path).to(self.device)
+        else:
+            raise NotImplementedError
+            # TODO train model if not found
+
+        self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=lr)
         self.criterion = torch.nn.MSELoss()
-        self.device = 'cpu'
 
     def deterministic_forward(self, emg_window):
         emg_window_tensor = emg_window.unsqueeze(0).to(self.device)
@@ -43,6 +49,11 @@ class SLController():
         return outputs
 
     def sl_update(self, states, optimal_actions):
+        if states.device != self.device:
+            states = states.to(self.device)
+        if optimal_actions.device != self.device:
+            optimal_actions = optimal_actions.to(self.device)
+
         self.policy.train()
         self.optimizer.zero_grad()
         predicted_action = self.policy(states)
