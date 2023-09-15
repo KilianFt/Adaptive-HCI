@@ -10,29 +10,10 @@ import tqdm
 
 from controllers import RLSLController, SLOnlyController
 from environment import XDProjection, EnvironmentWithUser
+from utils import onehot_to_dof
 from metrics import plot_and_mean
 import users
 
-
-def onehot_to_dof(onehot_vector):
-    onehot_vector = np.array(onehot_vector, dtype=float)
-    label_to_dof = np.array([
-        [0, 0],
-        [0, -1],  # left
-        [-1, 0],  # back
-        [0, 1],   # right
-        [1, 0],   # front
-    ])
-    
-    dof_cmd = np.dot(onehot_vector, label_to_dof)
-    
-    norm = np.linalg.norm(dof_cmd)
-    if norm > 0:
-        dof_cmd /= norm
-    else:
-        dof_cmd = np.zeros(2)
-
-    return dof_cmd
 
 def deterministic_rollout(environment, controller):
     observation, info = environment.reset()
