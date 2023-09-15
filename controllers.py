@@ -3,6 +3,8 @@ import numpy as np
 import torch
 from stable_baselines3 import PPO
 
+from pretrain_model import train_emg_decoder
+
 class BaseController:
     @abc.abstractmethod
     def deterministic_forward(self, x) -> torch.Tensor:
@@ -50,9 +52,7 @@ class SLOnlyController(BaseController):
         if model_path is not None:
             self.policy = torch.load(model_path).to(self.device)
         else:
-            print('ERROR: No model specified')
-            raise NotImplementedError
-            # TODO train model if not found
+            self.policy = train_emg_decoder()
 
         self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=lr)
         self.criterion = torch.nn.MSELoss()

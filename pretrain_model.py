@@ -1,9 +1,11 @@
+import datetime
+
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import accuracy_score, mean_squared_error
 
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split
 import torch.nn as nn
 import torch.optim as optim
 
@@ -11,14 +13,21 @@ from vit_pytorch import ViT
 
 from datasets import EMGWindowsDataset
 
-if __name__ == '__main__':
-
+def train_emg_decoder():
+    print('Training model')
     device = 'mps'
 
-    train_dataset = EMGWindowsDataset('mad')
-    test_dataset = EMGWindowsDataset('ninapro5')
+    dataset = EMGWindowsDataset('mad')
+    # dataset = EMGWindowsDataset('ninapro5')
 
-    n_labels = train_dataset.num_unique_labels
+    n_labels = dataset.num_unique_labels
+
+    total_dataset_size = len(dataset)
+    train_ratio = 0.8  # 80% of the data for training
+    train_size = int(train_ratio * total_dataset_size)
+    val_size = total_dataset_size - train_size
+
+    train_dataset, test_dataset = random_split(dataset, [train_size, val_size])
 
     train_dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True)
     test_dataloader = DataLoader(test_dataset, batch_size=32, shuffle=True)
@@ -104,9 +113,19 @@ if __name__ == '__main__':
 
     print('Finished Training')
 
-plt.plot(history['test_accs'])
-plt.show()
+    plt.plot(history['test_accs'])
+    plt.show()
 
-torch.save(model.cpu(), 'models/pretrained_vit_onehot_test_model.pt')
-model_state_dict = model.state_dict()
-torch.save(model_state_dict, 'models/pretrained_vit_onehot_test_state_dict.pt')
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    model_name = "pretrained_model"
+    model_save_path = f"models/{model_name}_{timestamp}.pt"
+
+    print('Saved model at', model_save_path)
+    torch.save(model.cpu(), model_save_path)
+    # model_state_dict = model.state_dict()
+    # torch.save(model_state_dict, 'models/pretrained_vit_onehot_test_state_dict.pt')
+    return model
+
+
+if __name__ == '__main__':
+    train_emg_decoder()

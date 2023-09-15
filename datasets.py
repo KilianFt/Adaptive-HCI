@@ -51,12 +51,12 @@ def get_raw_mad_dataset(eval_path, window_length, overlap):
                     data_read_from_file = np.array(data_read_from_file, dtype=np.float32)
 
                     dataset_example_formatted = []
-                    example = []
+                    example = None
                     emg_vector = []
                     for value in data_read_from_file:
                         emg_vector.append(value)
                         if (len(emg_vector) >= 8):
-                            if (example == []):
+                            if example is None:
                                 example = emg_vector
                             else:
                                 example = np.row_stack((example, emg_vector))
