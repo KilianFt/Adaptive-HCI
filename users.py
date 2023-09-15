@@ -28,7 +28,7 @@ def get_screen_center():
     return center_x, center_y
 
 
-class ProportionalUserPolicy(torch.nn.Module):
+class ClassificationUserPolicy(torch.nn.Module):
     @staticmethod
     def forward(observation):
         signal = observation["desired_goal"] - observation["achieved_goal"]
@@ -49,6 +49,19 @@ class ProportionalUserPolicy(torch.nn.Module):
                     elif i == 1:
                         onehot_vector[1] = 1.
         return onehot_vector
+
+
+class ProportionalUserPolicy(torch.nn.Module):
+    @staticmethod
+    def forward(observation):
+        signal = observation["desired_goal"] - observation["achieved_goal"]
+        signal = signal.astype(np.float32)
+        # only move in one direction at a time
+        if np.abs(signal[0]) > np.abs(signal[1]):
+            signal[1] = 0
+        else:
+            signal[0] = 0
+        return signal
 
 
 class BaseUser:
@@ -153,7 +166,7 @@ class FrankensteinProportionalUser(BaseUser):
 
 
 
-class EMGProportionalUser(BaseUser):
+class EMGClassificationUser(BaseUser):
     def __init__(self):
         self.emg_min = -128
         self.emg_max = 127
@@ -165,7 +178,7 @@ class EMGProportionalUser(BaseUser):
         self.n_new_samples = -overlap
 
         self.emg_buffer = deque(maxlen=window_size)
-        self.user_policy = ProportionalUserPolicy()
+        self.user_policy = ClassificationUserPolicy()
 
         self.q = multiprocessing.Queue()
         self.p = multiprocessing.Process(target=self.worker, args=(self.q,))
@@ -213,7 +226,7 @@ class EMGProportionalUser(BaseUser):
                     self.emg_buffer.append(norm_emg)
                     self.n_new_samples += 1
 
-            current_window = np.array(self.emg_buffer, dtype=np.float32)
+            current_window = np.array(self.emg_buffer, dtype=np.float32).swapaxes(0,1)
             self.n_new_samples = 0
             return current_window
 
