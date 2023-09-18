@@ -5,9 +5,9 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import accuracy_score, mean_squared_error, f1_score
 
 import torch
-from torch.utils.data import DataLoader, random_split
 import torch.nn as nn
 import torch.optim as optim
+from torch.utils.data import DataLoader, random_split
 
 from vit_pytorch import ViT
 
@@ -81,6 +81,7 @@ def train_model(model, optimizer, criterion, train_dataloader, test_dataloader, 
 
         print('test MSE', np.mean(test_mse_list))
         print('test acc', np.mean(test_accs))
+        print('test f1s', np.mean(test_f1s))
 
     print('Finished Training')
     return model, history
