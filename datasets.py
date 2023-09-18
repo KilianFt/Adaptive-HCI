@@ -254,3 +254,49 @@ class NinaPro1(data.Dataset[data.TensorDataset]):
 
     def __getitem__(self, index) -> data.TensorDataset:
         return self.class_dataset[index]
+
+
+class CombinedDataset(data.Dataset):
+    def __init__(self, dataset1, dataset2):
+        self.dataset1 = dataset1
+        self.dataset2 = dataset2
+
+        # Calculate the total length of the combined dataset
+        self.total_length = len(self.dataset1) + len(self.dataset2)
+
+    def __len__(self):
+        return self.total_length
+
+    def __getitem__(self, idx):
+        if idx < len(self.dataset1):
+            x_tensor = self.dataset1.windows[idx,:,:] 
+            y_tensor = self.dataset1.labels[idx]
+            return x_tensor, y_tensor 
+        else:
+            # Adjust the idx for the second dataset
+            idx -= len(self.dataset1)
+            x_tensor = self.dataset2.windows[idx,:,:] 
+            y_tensor = self.dataset2.labels[idx]
+            return x_tensor, y_tensor 
+
+    @property
+    def num_unique_labels(self):
+        assert self.dataset1.labels.shape[1] == self.dataset2.labels.shape[1], 'labels of both datasets must match'
+        return self.dataset1.labels.shape[1]
+
+class EMGWindowsAdaptattionDataset(data.Dataset):
+    def __init__(self, windows, labels):
+        self.windows = torch.tensor(windows, dtype=torch.float32)
+        self.labels = torch.tensor(labels, dtype=torch.float32)
+
+    def __len__(self):
+        return len(self.windows)
+
+    def __getitem__(self, idx):
+        x_tensor = self.windows[idx,:,:]
+        y_tensor = self.labels[idx]
+        return x_tensor, y_tensor
+    
+    @property
+    def num_unique_labels(self):
+        return self.labels.shape[1]

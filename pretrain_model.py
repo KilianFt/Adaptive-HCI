@@ -2,7 +2,7 @@ import datetime
 
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.metrics import accuracy_score, mean_squared_error
+from sklearn.metrics import accuracy_score, mean_squared_error, f1_score
 
 import torch
 from torch.utils.data import DataLoader, random_split
@@ -11,14 +11,88 @@ import torch.optim as optim
 
 from vit_pytorch import ViT
 
-from datasets import EMGWindowsDataset
+from datasets import EMGWindowsDataset, CombinedDataset
+
+def train_model(model, optimizer, criterion, train_dataloader, test_dataloader, device, epochs=10):
+
+    history = {
+        'test_accs': [],
+        'test_f1s': [],
+        'test_mse': [],
+        'losses': [],
+    }
+
+    for epoch in range(epochs):
+
+        running_loss = 0.0
+        for i, data in enumerate(train_dataloader, 0):
+            model.train()
+
+            train_inputs, train_labels = data
+            train_inputs = train_inputs.to(device)
+            train_labels = train_labels.to(device)
+
+            if model.__class__.__name__ == 'ViT':
+                train_inputs.unsqueeze_(axis=1)
+
+            optimizer.zero_grad()
+
+            outputs = model(train_inputs)
+            loss = criterion(outputs, train_labels)
+
+            loss.backward()
+            optimizer.step()
+
+            running_loss += loss.item()
+            history['losses'].append(loss.item())
+            if i % 1000 == 999:
+                print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 1000:.8f}')
+                running_loss = 0.0
+
+        test_accs = []
+        test_f1s = []
+        test_mse_list = []
+        for data in test_dataloader:
+            test_inputs, test_labels = data
+            test_inputs = test_inputs.to(device)
+            test_labels = test_labels.to(device)
+            if model.__class__.__name__ == 'ViT':
+                test_inputs.unsqueeze_(axis=1)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(test_inputs)
+                predictions = outputs.cpu().squeeze().numpy()
+
+                predicted_onehot = np.zeros_like(predictions)
+                predicted_onehot[predictions > 0.5] = 1
+
+            test_labels = test_labels.cpu()
+            test_acc = accuracy_score(test_labels, predicted_onehot)
+            test_f1 = f1_score(test_labels, predicted_onehot, average='micro')
+            test_mse = mean_squared_error(test_labels, predictions)
+
+            test_accs.append(test_acc)
+            test_f1s.append(test_f1)
+            test_mse_list.append(test_mse)
+
+        history['test_accs'].append(np.mean(test_accs))
+        history['test_f1s'].append(np.mean(test_f1s))
+        history['test_mse'].append(np.mean(test_mse_list))
+
+        print('test MSE', np.mean(test_mse_list))
+        print('test acc', np.mean(test_accs))
+
+    print('Finished Training')
+    return model, history
 
 def train_emg_decoder():
     print('Training model')
     device = 'mps'
 
-    dataset = EMGWindowsDataset('mad')
-    # dataset = EMGWindowsDataset('ninapro5')
+    mad_dataset = EMGWindowsDataset('mad', overlap=50)
+    ninapro5_dataset = EMGWindowsDataset('ninapro5', overlap=50)
+
+    dataset = CombinedDataset(mad_dataset, ninapro5_dataset)
 
     n_labels = dataset.num_unique_labels
 
@@ -49,69 +123,13 @@ def train_emg_decoder():
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
-    history = {
-        'test_accs': [],
-        'test_mse': [],
-        'losses': [],
-    }
-
-    for epoch in range(10):
-
-        running_loss = 0.0
-        for i, data in enumerate(train_dataloader, 0):
-            model.train()
-
-            train_inputs, train_labels = data
-            train_inputs = train_inputs.to(device)
-            train_labels = train_labels.to(device)
-
-            if model.__class__.__name__ == 'ViT':
-                train_inputs.unsqueeze_(axis=1)
-
-            optimizer.zero_grad()
-
-            outputs = model(train_inputs)
-            loss = criterion(outputs, train_labels)
-
-            loss.backward()
-            optimizer.step()
-
-            running_loss += loss.item()
-            history['losses'].append(loss.item())
-            if i % 1000 == 999:
-                print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 1000:.8f}')
-                running_loss = 0.0
-
-        test_accs = []
-        test_mse_list = []
-        for data in test_dataloader:
-            test_inputs, test_labels = data
-            test_inputs = test_inputs.to(device)
-            test_labels = test_labels.to(device)
-            if model.__class__.__name__ == 'ViT':
-                test_inputs.unsqueeze_(axis=1)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(test_inputs)
-                predictions = outputs.cpu().squeeze().numpy()
-
-                predicted_onehot = np.zeros_like(predictions)
-                predicted_onehot[predictions > 0.5] = 1
-
-            test_labels = test_labels.cpu()
-            test_acc = accuracy_score(test_labels, predicted_onehot)
-            test_mse = mean_squared_error(test_labels, predictions)
-
-            test_accs.append(test_acc)
-            test_mse_list.append(test_mse)
-
-        history['test_accs'].append(np.mean(test_accs))
-        history['test_mse'].append(np.mean(test_mse_list))
-
-        print('test MSE', np.mean(test_mse_list))
-        print('test acc', np.mean(test_accs))
-
-    print('Finished Training')
+    model, history = train_model(model=model,
+                                 optimizer=optimizer,
+                                 criterion=criterion,
+                                 train_dataloader=train_dataloader,
+                                 test_dataloader=test_dataloader,
+                                 device=device,
+                                 epochs=10)
 
     plt.plot(history['test_accs'])
     plt.show()
