@@ -1,11 +1,14 @@
 import abc
 import time
+import multiprocessing
+from collections import deque
 
 import gymnasium as gym
 import numpy as np
 import pyautogui
 import torch.nn
 from screeninfo import get_monitors
+from pyomyo import Myo, emg_mode
 
 import datasets
 
@@ -23,6 +26,29 @@ def get_screen_center():
     center_x = monitor.width // 2
     center_y = monitor.height // 2
     return center_x, center_y
+
+
+class ClassificationUserPolicy(torch.nn.Module):
+    @staticmethod
+    def forward(observation):
+        signal = observation["desired_goal"] - observation["achieved_goal"]
+        signal = signal.astype(np.float32)
+
+        # create onehot signal
+        onehot_vector = np.zeros(5, dtype=np.float32)
+        for i, single_signal in enumerate(signal):
+            if np.abs(single_signal) > 0.005:
+                if single_signal > 0:
+                    if i == 0:
+                        onehot_vector[4] = 1.
+                    elif i == 1:
+                        onehot_vector[3] = 1.
+                else:
+                    if i == 0:
+                        onehot_vector[2] = 1.
+                    elif i == 1:
+                        onehot_vector[1] = 1.
+        return onehot_vector
 
 
 class ProportionalUserPolicy(torch.nn.Module):
@@ -137,3 +163,97 @@ class FrankensteinProportionalUser(BaseUser):
         sample_idx = np.random.randint(0, len(class_dataset))
         user_features, _target = class_dataset[sample_idx]
         return user_features
+
+
+
+class EMGClassificationUser(BaseUser):
+    def __init__(self):
+        self.emg_min = -128
+        self.emg_max = 127
+        window_size = 200
+        overlap = 150
+        n_channels = 8
+
+        self.stride = window_size - overlap
+        self.n_new_samples = -overlap
+
+        self.emg_buffer = deque(maxlen=window_size)
+        self.user_policy = ClassificationUserPolicy()
+
+        self.q = multiprocessing.Queue()
+        self.p = multiprocessing.Process(target=self.worker, args=(self.q,))
+        self.p.start()
+
+        self.observation_space_ = gym.spaces.Box(
+            low=-1., high=1., shape=(n_channels,window_size), dtype=np.float32)
+
+    @staticmethod
+    def worker(q):
+        try:
+            m = Myo(mode=emg_mode.RAW)
+            m.connect()
+            
+            def add_to_queue(emg, _):
+                q.put(emg)
+
+            m.add_emg_handler(add_to_queue)
+            
+            def print_battery(bat):
+                print("Battery level:", bat)
+
+            m.add_battery_handler(print_battery)
+
+            # Orange logo and bar LEDs
+            m.set_leds([128, 0, 0], [128, 0, 0])
+            # Vibrate to know we connected okay
+            m.vibrate(1)
+            
+            """worker function"""
+            while True:
+                m.run()
+
+        except Exception as e:
+            print(f"Exception in worker: {e}")
+        finally:
+            print("Worker Stopped")
+
+    def get_emg_window(self):
+        try:
+            while self.n_new_samples < self.stride:
+                while not(self.q.empty()):
+                    emg = list(self.q.get())
+                    norm_emg = np.interp(emg, (self.emg_min, self.emg_max), (-1, +1))
+                    self.emg_buffer.append(norm_emg)
+                    self.n_new_samples += 1
+
+            current_window = np.array(self.emg_buffer, dtype=np.float32).swapaxes(0,1)
+            self.n_new_samples = 0
+            return current_window
+
+        except KeyboardInterrupt:
+            print("Quitting")
+            quit()
+
+    @property
+    def observation_space(self):
+        return self.observation_space_
+
+    def reset(self, observation, info):
+        info["original_observation"] = observation
+        user_features = self.get_emg_window()
+        return user_features, info
+
+    def think(self) -> None:
+        return
+
+    def step(self, observation, reward, terminated, truncated, info):
+        user_features = self.get_emg_window()
+        user_action = self.user_policy(observation)
+        info["original_observation"] = observation
+        info["optimal_action"] = user_action
+
+        return user_features, reward, terminated, truncated, info
+    
+    def __del__(self):
+        self.p.terminate()
+        self.p.join()

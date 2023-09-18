@@ -2,14 +2,16 @@ import argparse
 import itertools
 import os
 import pickle
+import datetime
 
 import gymnasium as gym
 import numpy as np
 import torch
 import tqdm
 
-from controllers import RLSLController
+from controllers import RLSLController, SLOnlyController
 from environment import XDProjection, EnvironmentWithUser
+from utils import onehot_to_dof
 from metrics import plot_and_mean
 import users
 
@@ -28,7 +30,11 @@ def deterministic_rollout(environment, controller):
 
     for time_step in itertools.count():
         action_mean = controller.deterministic_forward(observation)
-        action = action_mean.squeeze().detach().numpy()
+        predictions = action_mean.cpu().detach().squeeze().numpy()
+        predicted_labels = np.zeros_like(predictions)
+        predicted_labels[predictions > 0.5] = 1
+        action = onehot_to_dof(predicted_labels)
+
         observation, reward, terminated, truncated, info = environment.step(action)
 
         observation = torch.tensor(observation).unsqueeze(0)
@@ -67,11 +73,14 @@ def train_sl(environment, controller, epochs, do_training=True):
     episode_durations = []
     goals = []
 
+    episodes = []
+
     if do_training:
         initial_parameters = controller.policy.state_dict()
         if not os.path.exists('models/2d_fetch'):
             os.makedirs('models/2d_fetch')
-        torch.save(initial_parameters, 'models/2d_fetch/initial.pt')
+        modelname = 'models/2d_fetch/initial.pt'
+        torch.save(initial_parameters, modelname)
     checkpoint_every = max(epochs // 10, 1)
 
     for epoch in tqdm.trange(epochs):
@@ -82,7 +91,8 @@ def train_sl(environment, controller, epochs, do_training=True):
             loss = controller.sl_update(user_signals, optimal_actions)
             if epoch % checkpoint_every == 0:
                 parameters = controller.policy.state_dict()
-                torch.save(parameters, f'models/2d_fetch/epoch_{str(epoch)}.pt')
+                modelname = f'models/2d_fetch/epoch_{str(epoch)}.pt'
+                torch.save(parameters, modelname)
         else:
             loss = None
 
@@ -92,8 +102,18 @@ def train_sl(environment, controller, epochs, do_training=True):
         sl_losses.append(loss)
         goals.append(goal)
 
-    return sl_losses, sl_reward_history, sl_reward_sum_history, episode_durations, goals
+        episode_results = {
+            'states': states,
+            'user_signals': user_signals,
+            'actions': actions,
+            'optimal_actions': optimal_actions,
+            'rewards': rewards,
+            'goal': goal,
+            'episode_durations': episode_duration,
+        }
+        episodes.append(episode_results)
 
+    return episodes, sl_losses
 
 def main():
     parser = argparse.ArgumentParser(prog='Adaptive HCI - Fetch')
@@ -105,35 +125,40 @@ def main():
     do_training = not args.no_training
 
     max_steps = 100
-    total_timesteps = 100
+    total_timesteps = 10
     n_dof = 2
+    lr = 1e-3
+    device = 'cpu'
 
-    user = users.FrankensteinProportionalUser()
+    controller = SLOnlyController(args.model, device=device, lr=lr)
 
-    environment = gym.make('FetchReachDense-v2', max_episode_steps=max_steps)  # , render_mode="human")
+    # user = users.FrankensteinProportionalUser()
+    user = users.EMGClassificationUser()
+
     environment = gym.make('FetchReachDense-v2', max_episode_steps=max_steps, render_mode="human")
     environment = XDProjection(environment, n_dof=n_dof)
     environment = EnvironmentWithUser(environment, user)
 
-    controller = RLSLController(env=environment)
+    # controller = RLSLController(env=environment)
 
-    if args.model is not None:
-        trained_parameters = torch.load(args.model)
-        controller.policy.load_state_dict(trained_parameters)
+    episodes, sl_losses = train_sl(environment,
+                                   controller,
+                                   total_timesteps,
+                                   do_training=do_training)
 
-    sl_losses, sl_reward_history, sl_reward_sum_history, sl_avg_steps, goals = train_sl(
-        environment, controller, total_timesteps, do_training=do_training)
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    results_filename = f"datasets/OnlineData/episodes_{timestamp}.pkl"
 
-    results = {
-        'sl_losses': sl_losses,
-        'sl_reward_history': sl_reward_history,
-        'sl_reward_sum_history': sl_reward_sum_history,
-        'sl_avg_steps': sl_avg_steps,
-        'goals': goals,
-    }
+    with open(results_filename, 'wb') as f:
+        pickle.dump(episodes, f)
 
-    with open('models/2d_fetch/results.pkl', 'wb') as f:
-        pickle.dump(results, f)
+    resulting_model_filename = f"models/2d_fetch/model_{timestamp}.pkl"
+    torch.save(controller.policy.cpu(), resulting_model_filename)
+    print('Saved final model at', resulting_model_filename)
+
+    # visualize results
+    sl_reward_sum_history = [np.sum(e['rewards'].numpy()) for e in episodes]
+    goals = [e['goal'] for e in episodes]
 
     sl_reward_goal_dist_ratio = []
     for r, g in zip(sl_reward_sum_history, goals):
@@ -144,6 +169,7 @@ def main():
             rgs = r / gsum
         sl_reward_goal_dist_ratio.append(rgs)
 
+    sl_avg_steps = [e['episode_durations'] for e in episodes]
     plot_and_mean(sl_avg_steps, "SL avg steps")
     plot_and_mean(sl_reward_goal_dist_ratio, "SL return / goal dist")
     plot_and_mean(sl_losses, "SL losses")
