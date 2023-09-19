@@ -22,13 +22,13 @@ def train_model(model,
                 device,
                 epochs=10,
                 early_stopping=True,
-                wandb_logging=False):
+                wandb_logging=False,):
 
     history = {
         'test_accs': [],
         'test_f1s': [],
         'test_mse': [],
-        'losses': [],
+        'train_loss': [],
     }
 
     for epoch in range(epochs):
@@ -87,7 +87,6 @@ def train_model(model,
         train_loss = np.mean(train_losses)
 
         if wandb_logging:
-            print('log_wandb')
             wandb.log({
                 'test_acc': test_mean_accs,
                 'test_f1': test_mean_f1s,
@@ -113,38 +112,30 @@ def train_model(model,
 
 
 def train_emg_decoder():
-    print('Training model')
     device = 'mps'
 
-    random_seed = 100
-    torch.manual_seed(random_seed)
-
-    # TODO compare losses
-
-    config = {
-        'pretrained': False,
-        'early_stopping': True,
-        'epochs': 20,
-        'batch_size': 32,
-        'lr': 1e-3,
-        'window_size': 200,
-        'overlap': 50,
-        'model_class': 'ViT',
-        'patch_size': 8,
-        'dim': 64,
-        'depth': 1,
-        'heads': 2,
-        'mlp_dim': 128,
-        'dropout': 0.1,
-        'emb_dropout': 0.1,
-        'channels': 1,
-        'random_seed': random_seed,
-    }
+    # config = {
+    #     'pretrained': False,
+    #     'early_stopping': False,
+    #     'epochs': 50,
+    #     'batch_size': 32,
+    #     'lr': 1e-3,
+    #     'window_size': 200,
+    #     'overlap': 50,
+    #     'model_class': 'ViT',
+    #     'patch_size': 2,
+    #     'dim': 64,
+    #     'depth': 1,
+    #     'heads': 2,
+    #     'mlp_dim': 128,
+    #     'dropout': 0.1,
+    #     'emb_dropout': 0.1,
+    #     'channels': 1,
+    #     'random_seed': random_seed,
+    # }
 
     run = wandb.init(
-        project="adaptive-hci",
         tags=["pretraining"],
-        config=config,
     )
 
     mad_dataset = EMGWindowsDataset('mad',
@@ -178,7 +169,6 @@ def train_emg_decoder():
         channels = wandb.config.channels,
     ).to(device=device)
 
-    # criterion = nn.CrossEntropyLoss()
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=wandb.config.lr)
 
@@ -192,18 +182,52 @@ def train_emg_decoder():
                                  test_dataloader=test_dataloader,
                                  device=device,
                                  epochs=wandb.config.epochs,
+                                 early_stopping=False,
                                  wandb_logging=True)
 
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    model_name = "pretrained_model"
-    model_save_path = f"models/{model_name}_{timestamp}.pt"
+    # timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    # model_name = "pretrained_model"
+    # model_save_path = f"models/{model_name}_{timestamp}.pt"
 
-    print('Saved model at', model_save_path)
-    torch.save(model.cpu(), model_save_path)
+    # print('Saved model at', model_save_path)
+    # torch.save(model.cpu(), model_save_path)
     # model_state_dict = model.state_dict()
     # torch.save(model_state_dict, 'models/pretrained_vit_onehot_test_state_dict.pt')
+
     return model
 
 
 if __name__ == '__main__':
-    train_emg_decoder()
+
+    random_seed = 100
+    torch.manual_seed(random_seed)
+
+    sweep_configuration = {
+        'method': 'bayes',
+        'name': 'sweep',
+        'metric': {'goal': 'maximize', 'name': 'test_acc'},
+        'parameters': {
+            'batch_size': {'values': [16, 32, 64]},
+            'epochs': {'value': 40},
+            'lr': {'max': 0.005, 'min': 0.0001},
+            'window_size': {'values': [200, 400, 600]},
+            'overlap': {'values': [50, 100, 150]},
+            'model_class': {'value': 'ViT'},
+            'patch_size': {'values': [2, 4, 8]},
+            'dim': {'values': [32, 64, 128]},
+            'depth': {'max': 4, 'min': 1},
+            'heads': {'max': 6, 'min': 1},
+            'mlp_dim': {'values': [64, 128, 256]},
+            'dropout': {'max': 0.3, 'min': 0.1},
+            'emb_dropout': {'max': 0.3, 'min': 0.1},
+            'channels': {'value': 1},
+        },
+    }
+
+    # Initialize sweep by passing in config.
+    # (Optional) Provide a name of the project.
+    sweep_id = wandb.sweep(sweep=sweep_configuration, project="adaptive-hci")
+
+    wandb.agent(sweep_id, function=train_emg_decoder, count=1)
+
+    # train_emg_decoder()
