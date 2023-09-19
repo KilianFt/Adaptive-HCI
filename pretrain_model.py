@@ -1,5 +1,6 @@
 import datetime
 
+import wandb
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import accuracy_score, mean_squared_error, f1_score
@@ -13,7 +14,15 @@ from vit_pytorch import ViT
 
 from datasets import EMGWindowsDataset, CombinedDataset
 
-def train_model(model, optimizer, criterion, train_dataloader, test_dataloader, device, epochs=10):
+def train_model(model,
+                optimizer,
+                criterion,
+                train_dataloader,
+                test_dataloader,
+                device,
+                epochs=10,
+                early_stopping=True,
+                wandb_logging=False):
 
     history = {
         'test_accs': [],
@@ -24,7 +33,7 @@ def train_model(model, optimizer, criterion, train_dataloader, test_dataloader, 
 
     for epoch in range(epochs):
 
-        running_loss = 0.0
+        train_losses = []
         for i, data in enumerate(train_dataloader, 0):
             model.train()
 
@@ -43,11 +52,7 @@ def train_model(model, optimizer, criterion, train_dataloader, test_dataloader, 
             loss.backward()
             optimizer.step()
 
-            running_loss += loss.item()
-            history['losses'].append(loss.item())
-            if i % 1000 == 999:
-                print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 1000:.8f}')
-                running_loss = 0.0
+            train_losses.append(loss.item())
 
         test_accs = []
         test_f1s = []
@@ -75,65 +80,119 @@ def train_model(model, optimizer, criterion, train_dataloader, test_dataloader, 
             test_f1s.append(test_f1)
             test_mse_list.append(test_mse)
 
-        history['test_accs'].append(np.mean(test_accs))
-        history['test_f1s'].append(np.mean(test_f1s))
-        history['test_mse'].append(np.mean(test_mse_list))
+        test_mean_accs = np.mean(test_accs)
+        test_mean_f1s = np.mean(test_f1s)
+        test_mse = np.mean(test_mse_list)
 
-        print('test MSE', np.mean(test_mse_list))
-        print('test acc', np.mean(test_accs))
-        print('test f1s', np.mean(test_f1s))
+        train_loss = np.mean(train_losses)
+
+        if wandb_logging:
+            print('log_wandb')
+            wandb.log({
+                'test_acc': test_mean_accs,
+                'test_f1': test_mean_f1s,
+                'test_mse': test_mse,
+                'train_loss': train_loss,
+            })
+
+        history['test_accs'].append(test_mean_accs)
+        history['test_f1s'].append(test_mean_f1s)
+        history['test_mse'].append(test_mse)
+        history['train_loss'].append(train_loss)
+
+        # early stopping
+        if early_stopping and \
+                len(history['test_accs']) >= 3 and \
+                history['test_accs'][-1] < history['test_accs'][-2] and \
+                history['test_accs'][-2] < history['test_accs'][-3]:
+            print('early stopping at epoch', epoch)
+            break
 
     print('Finished Training')
     return model, history
+
 
 def train_emg_decoder():
     print('Training model')
     device = 'mps'
 
-    mad_dataset = EMGWindowsDataset('mad', overlap=50)
-    ninapro5_dataset = EMGWindowsDataset('ninapro5', overlap=50)
+    random_seed = 100
+    torch.manual_seed(random_seed)
 
-    dataset = CombinedDataset(mad_dataset, ninapro5_dataset)
+    # TODO compare losses
 
-    n_labels = dataset.num_unique_labels
+    config = {
+        'pretrained': False,
+        'early_stopping': True,
+        'epochs': 20,
+        'batch_size': 32,
+        'lr': 1e-3,
+        'window_size': 200,
+        'overlap': 50,
+        'model_class': 'ViT',
+        'patch_size': 8,
+        'dim': 64,
+        'depth': 1,
+        'heads': 2,
+        'mlp_dim': 128,
+        'dropout': 0.1,
+        'emb_dropout': 0.1,
+        'channels': 1,
+        'random_seed': random_seed,
+    }
 
-    total_dataset_size = len(dataset)
-    train_ratio = 0.8  # 80% of the data for training
-    train_size = int(train_ratio * total_dataset_size)
-    val_size = total_dataset_size - train_size
+    run = wandb.init(
+        project="adaptive-hci",
+        tags=["pretraining"],
+        config=config,
+    )
 
-    train_dataset, test_dataset = random_split(dataset, [train_size, val_size])
+    mad_dataset = EMGWindowsDataset('mad',
+                                    window_size=wandb.config.window_size,
+                                    overlap=wandb.config.overlap)
+    ninapro5_train_dataset = EMGWindowsDataset('ninapro5_train',
+                                    window_size=wandb.config.window_size,
+                                    overlap=wandb.config.overlap)
+    test_dataset = EMGWindowsDataset('ninapro5_test',
+                                    window_size=wandb.config.window_size,
+                                    overlap=wandb.config.overlap)
+    
 
-    train_dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    test_dataloader = DataLoader(test_dataset, batch_size=32, shuffle=True)
+    train_dataset = CombinedDataset(mad_dataset, ninapro5_train_dataset)
+
+    n_labels = train_dataset.num_unique_labels
+
+    train_dataloader = DataLoader(train_dataset, batch_size=wandb.config.batch_size, shuffle=True)
+    test_dataloader = DataLoader(test_dataset, batch_size=wandb.config.batch_size, shuffle=True)
 
     model = ViT(
-        image_size = 200,
-        patch_size = 8,
+        image_size = wandb.config.window_size,
+        patch_size = wandb.config.patch_size,
         num_classes = n_labels,
-        dim = 64,
-        depth = 1,
-        heads = 2,
-        mlp_dim = 128,
-        dropout = 0.1,
-        emb_dropout = 0.1,
-        channels=1,
-    ).to(device) 
+        dim = wandb.config.dim,
+        depth = wandb.config.depth,
+        heads = wandb.config.heads,
+        mlp_dim = wandb.config.mlp_dim,
+        dropout = wandb.config.dropout,
+        emb_dropout = wandb.config.emb_dropout,
+        channels = wandb.config.channels,
+    ).to(device=device)
 
     # criterion = nn.CrossEntropyLoss()
     criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = optim.Adam(model.parameters(), lr=wandb.config.lr)
 
-    model, history = train_model(model=model,
+    wandb.config.loss = criterion.__class__.__name__
+    wandb.config.model_class = model.__class__.__name__
+
+    model, _ = train_model(model=model,
                                  optimizer=optimizer,
                                  criterion=criterion,
                                  train_dataloader=train_dataloader,
                                  test_dataloader=test_dataloader,
                                  device=device,
-                                 epochs=10)
-
-    plt.plot(history['test_accs'])
-    plt.show()
+                                 epochs=wandb.config.epochs,
+                                 wandb_logging=True)
 
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     model_name = "pretrained_model"

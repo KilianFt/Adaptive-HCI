@@ -200,7 +200,8 @@ def get_ninapro_windows_dataset(ninapro_base_dir, emg_range, window_length, over
 
 class EMGWindowsDataset(data.Dataset):
     DATASET_DIRS = {
-        'ninapro5': ('datasets/ninapro/DB5/', get_ninapro_windows_dataset),
+        'ninapro5_train': ('datasets/ninapro/DB5/train/', get_ninapro_windows_dataset),
+        'ninapro5_test': ('datasets/ninapro/DB5/test/', get_ninapro_windows_dataset),
         'mad': ('datasets/MyoArmbandDataset/', get_mad_windows_dataset),
     }
     def __init__(self, dataset_name, window_size=200, overlap=0, emg_range=(-128,127)):
