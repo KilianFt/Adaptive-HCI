@@ -18,7 +18,7 @@ import users
 
 def deterministic_rollout(environment, controller):
     observation, info = environment.reset()
-    observation = torch.tensor(observation).unsqueeze(0)
+    observation = torch.tensor(observation)
 
     rollout_goal = info["original_observation"]["desired_goal"]
 
@@ -32,12 +32,12 @@ def deterministic_rollout(environment, controller):
         action_mean = controller.deterministic_forward(observation)
         predictions = action_mean.cpu().detach().squeeze().numpy()
         predicted_labels = np.zeros_like(predictions)
-        predicted_labels[predictions > 0.5] = 1
+        predicted_labels[predictions > 0.7] = 1
         action = onehot_to_dof(predicted_labels)
-
+        action *= 0.5
         observation, reward, terminated, truncated, info = environment.step(action)
 
-        observation = torch.tensor(observation).unsqueeze(0)
+        observation = torch.tensor(observation)
 
         optimal_action = info["optimal_action"]
 
@@ -86,8 +86,8 @@ def train_sl(environment, controller, epochs, do_training=True):
     for epoch in tqdm.trange(epochs):
         states, user_signals, actions, optimal_actions, rewards, episode_duration, goal = deterministic_rollout(
             environment, controller)
-
-        if do_training:
+        
+        if epoch > 0 and epoch % 3 == 0 and do_training:
             loss = controller.sl_update(user_signals, optimal_actions)
             if epoch % checkpoint_every == 0:
                 parameters = controller.policy.state_dict()
@@ -124,13 +124,21 @@ def main():
 
     do_training = not args.no_training
 
-    max_steps = 100
-    total_timesteps = 10
+    max_steps = 150
+    total_timesteps = 40
     n_dof = 2
-    lr = 1e-3
+    lr = 1e-4
+    batch_size = 32
+    epochs = 1
+    n_frozen_layers = 2
     device = 'cpu'
 
-    controller = SLOnlyController(args.model, device=device, lr=lr)
+    controller = SLOnlyController(args.model,
+                                  device=device,
+                                  lr=lr,
+                                  batch_size=batch_size,
+                                  epochs=epochs,
+                                  n_frozen_layers=n_frozen_layers)
 
     # user = users.FrankensteinProportionalUser()
     user = users.EMGClassificationUser()

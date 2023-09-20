@@ -7,9 +7,9 @@ from sklearn.metrics import accuracy_score, mean_squared_error, f1_score
 def train_model(model,
                 optimizer,
                 criterion,
-                train_dataloader,
-                test_dataloader,
                 device,
+                train_dataloader,
+                test_dataloader=None,
                 model_name=None,
                 epochs=10,
                 wandb_logging=False,):
@@ -44,37 +44,42 @@ def train_model(model,
 
             train_losses.append(loss.item())
 
-        test_accs = []
-        test_f1s = []
-        test_mse_list = []
-        for data in test_dataloader:
-            test_inputs, test_labels = data
-            test_inputs = test_inputs.to(device)
-            test_labels = test_labels.to(device)
-            if model.__class__.__name__ == 'ViT':
-                test_inputs.unsqueeze_(axis=1)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(test_inputs)
-                predictions = outputs.cpu().squeeze().numpy()
-
-                predicted_onehot = np.zeros_like(predictions)
-                predicted_onehot[predictions > 0.5] = 1
-
-            test_labels = test_labels.cpu()
-            test_acc = accuracy_score(test_labels, predicted_onehot)
-            test_f1 = f1_score(test_labels, predicted_onehot, average='micro')
-            test_mse = mean_squared_error(test_labels, predictions)
-
-            test_accs.append(test_acc)
-            test_f1s.append(test_f1)
-            test_mse_list.append(test_mse)
-
-        test_mean_accs = np.mean(test_accs)
-        test_mean_f1s = np.mean(test_f1s)
-        test_mse = np.mean(test_mse_list)
-
         train_loss = np.mean(train_losses)
+
+        if test_dataloader is not None:
+            test_accs = []
+            test_f1s = []
+            test_mse_list = []
+            for data in test_dataloader:
+                test_inputs, test_labels = data
+                test_inputs = test_inputs.to(device)
+                test_labels = test_labels.to(device)
+                if model.__class__.__name__ == 'ViT':
+                    test_inputs.unsqueeze_(axis=1)
+                model.eval()
+                with torch.no_grad():
+                    outputs = model(test_inputs)
+                    predictions = outputs.cpu().squeeze().numpy()
+
+                    predicted_onehot = np.zeros_like(predictions)
+                    predicted_onehot[predictions > 0.7] = 1
+
+                test_labels = test_labels.cpu()
+                test_acc = accuracy_score(test_labels, predicted_onehot)
+                test_f1 = f1_score(test_labels, predicted_onehot, average='micro')
+                test_mse = mean_squared_error(test_labels, predictions)
+
+                test_accs.append(test_acc)
+                test_f1s.append(test_f1)
+                test_mse_list.append(test_mse)
+
+            test_mean_accs = np.mean(test_accs)
+            test_mean_f1s = np.mean(test_f1s)
+            test_mse = np.mean(test_mse_list)
+        
+            history['test_accs'].append(test_mean_accs)
+            history['test_f1s'].append(test_mean_f1s)
+            history['test_mse'].append(test_mse)
 
         if wandb_logging:
             wandb.log({
@@ -84,9 +89,6 @@ def train_model(model,
                 'train_loss': train_loss,
             })
 
-        history['test_accs'].append(test_mean_accs)
-        history['test_f1s'].append(test_mean_f1s)
-        history['test_mse'].append(test_mse)
         history['train_loss'].append(train_loss)
 
         if model_name is not None:
