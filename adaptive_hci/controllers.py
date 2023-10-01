@@ -80,7 +80,6 @@ class SLOnlyController(BaseController):
         return outputs
     
     def sl_update(self, states, optimal_actions):
-        # create dataset
         train_dataset = EMGWindowsAdaptattionDataset(windows=states, labels=optimal_actions)
 
         train_dataloader = DataLoader(train_dataset,

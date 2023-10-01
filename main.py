@@ -9,12 +9,11 @@ import numpy as np
 import torch
 import tqdm
 
-from controllers import RLSLController, SLOnlyController
-from environment import XDProjection, EnvironmentWithUser
-from utils import onehot_to_dof
-from metrics import plot_and_mean
-import users
-
+from adaptive_hci.controllers import RLSLController, SLOnlyController
+from adaptive_hci.environment import XDProjection, EnvironmentWithUser
+from adaptive_hci.utils import onehot_to_dof
+from adaptive_hci.metrics import plot_and_mean
+from adaptive_hci import users
 
 def deterministic_rollout(environment, controller):
     observation, info = environment.reset()

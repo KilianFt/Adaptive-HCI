@@ -79,7 +79,8 @@ class XDProjection(gym.Wrapper):
 
         observation, reward, terminated, truncated, info = self.env.step(mujoco_aciton)
         self._project_observation(observation)
-        if float(reward) > -0.005:
+        # FIXME change back to 0.005?
+        if float(reward) > -0.03:
             terminated = True
 
         return observation, reward, terminated, truncated, info
