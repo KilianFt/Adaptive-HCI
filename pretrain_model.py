@@ -15,7 +15,7 @@ from datasets import EMGWindowsDataset, CombinedDataset
 from training import train_model
 
 
-def train_emg_decoder():
+def train_emg_decoder(use_ninapro = False):
     device = 'mps'
 
     config = {
@@ -38,7 +38,7 @@ def train_emg_decoder():
         'random_seed': random_seed,
     }
 
-    run = wandb.init(
+    _ = wandb.init(
         project='adaptive-hci',
         tags=["pretraining", "mad_only"],
         config=config
@@ -47,25 +47,28 @@ def train_emg_decoder():
     mad_dataset = EMGWindowsDataset('mad',
                                     window_size=wandb.config.window_size,
                                     overlap=wandb.config.overlap)
-    # ninapro5_train_dataset = EMGWindowsDataset('ninapro5_train',
-    #                                 window_size=wandb.config.window_size,
-    #                                 overlap=wandb.config.overlap)
-    # test_dataset = EMGWindowsDataset('ninapro5_test',
-    #                                 window_size=wandb.config.window_size,
-    #                                 overlap=wandb.config.overlap)
-    
 
-    # train_dataset = CombinedDataset(mad_dataset, ninapro5_train_dataset)
+    if use_ninapro:
+        ninapro5_train_dataset = EMGWindowsDataset('ninapro5_train',
+                                        window_size=wandb.config.window_size,
+                                        overlap=wandb.config.overlap)
+        ninapro5_test_dataset = EMGWindowsDataset('ninapro5_test',
+                                        window_size=wandb.config.window_size,
+                                        overlap=wandb.config.overlap)
+        
+        ninapro = CombinedDataset(ninapro5_test_dataset, ninapro5_train_dataset)
+        dataset = CombinedDataset(mad_dataset, ninapro)
+    else:
+        dataset = mad_dataset
 
-    n_labels = mad_dataset.num_unique_labels
+    n_labels = dataset.num_unique_labels
 
     train_ratio = 0.8  # 80% of the data for training
-    val_ratio = 1.0 - train_ratio  # 20% of the data for validation
 
-    total_dataset_size = len(mad_dataset)
+    total_dataset_size = len(dataset)
     train_size = int(train_ratio * total_dataset_size)
     val_size = total_dataset_size - train_size
-    train_dataset, test_dataset = random_split(mad_dataset, [train_size, val_size])
+    train_dataset, test_dataset = random_split(dataset, [train_size, val_size])
 
     train_dataloader = DataLoader(train_dataset, batch_size=wandb.config.batch_size, shuffle=True)
     test_dataloader = DataLoader(test_dataset, batch_size=wandb.config.batch_size, shuffle=True)
@@ -103,7 +106,7 @@ def train_emg_decoder():
                                  wandb_logging=True)
 
 
-    print('best model epoch', np.argmax(history['test_accs']))
+    print('Best model epoch', np.argmax(history['test_accs']))
 
     model_save_path = f"models/{model_name}.pt"
     print('Saved model at', model_save_path)
@@ -117,4 +120,4 @@ if __name__ == '__main__':
     random_seed = 100
     torch.manual_seed(random_seed)
 
-    train_emg_decoder()
+    _ = train_emg_decoder()

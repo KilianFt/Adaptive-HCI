@@ -66,7 +66,11 @@ def train_rl(controller: RLSLController, epochs):
     return learner
 
 
-def train_sl(environment, controller, epochs, do_training=True):
+def train_sl(environment,
+             controller,
+             epochs,
+             n_episodes_per_train=1,
+             do_training=True):
     sl_reward_history = []
     sl_reward_sum_history = []
     sl_losses = []
@@ -87,7 +91,7 @@ def train_sl(environment, controller, epochs, do_training=True):
         states, user_signals, actions, optimal_actions, rewards, episode_duration, goal = deterministic_rollout(
             environment, controller)
         
-        if epoch > 0 and epoch % 3 == 0 and do_training:
+        if epoch > 0 and epoch % n_episodes_per_train == 0 and do_training:
             loss = controller.sl_update(user_signals, optimal_actions)
             if epoch % checkpoint_every == 0:
                 parameters = controller.policy.state_dict()
@@ -110,6 +114,7 @@ def train_sl(environment, controller, epochs, do_training=True):
             'rewards': rewards,
             'goal': goal,
             'episode_durations': episode_duration,
+            'model_name': controller.model_name,
         }
         episodes.append(episode_results)
 
@@ -125,7 +130,7 @@ def main():
     do_training = not args.no_training
 
     max_steps = 150
-    total_timesteps = 40
+    total_timesteps = 10
     n_dof = 2
     lr = 1e-4
     batch_size = 32

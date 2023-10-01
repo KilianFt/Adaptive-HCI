@@ -37,7 +37,7 @@ class ClassificationUserPolicy(torch.nn.Module):
         onehot_vector = np.zeros(5, dtype=np.float32)
 
         for i, single_signal in enumerate(signal):
-            if np.abs(single_signal) > 0.05:
+            if np.abs(single_signal) > 0.005:
                 if single_signal > 0:
                     if i == 0:
                         onehot_vector[4] = 1.
