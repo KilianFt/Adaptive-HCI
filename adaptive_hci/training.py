@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import tqdm
 from sklearn import metrics
 
 
@@ -22,7 +23,7 @@ def train_model(
         'train_loss': [],
     }
 
-    for epoch in range(epochs):
+    for epoch in tqdm.trange(epochs):
         train_losses = []
         for i, data in enumerate(train_dataloader, 0):
             model.train()
