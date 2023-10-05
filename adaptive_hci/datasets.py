@@ -80,7 +80,17 @@ def get_raw_mad_dataset(eval_path, window_length, overlap):
     return raw_dataset_dict
 
 
+def maybe_download_mad_dataset(mad_base_dir):
+    if os.path.exists(mad_base_dir):
+        return
+
+    os.makedirs(mad_base_dir, exist_ok=True)
+    os.system(f'git clone https://github.com/UlysseCoteAllard/MyoArmbandDataset {mad_base_dir}')
+
+
 def get_mad_windows_dataset(mad_base_dir, _, window_length, overlap):
+    maybe_download_mad_dataset(mad_base_dir)
+
     train_path = mad_base_dir + 'PreTrainingDataset/'
     eval_path = mad_base_dir + 'EvaluationDataset/'
 
