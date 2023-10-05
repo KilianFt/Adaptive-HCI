@@ -1,0 +1,68 @@
+program: pretrain_model.py
+command:
+  - ${env}
+  - ${interpreter}
+  - -O
+  - ${program}
+  - ${args}
+metric:
+  name: test_mse
+  goal: minimize
+method: bayes
+early_terminate:
+  type: hyperband
+  min_iter: 3
+
+parameters:
+  lr:
+    distribution: log_uniform_values
+    min: 5e-4
+    max: 5e-3
+  batch_size:
+    distribution: q_log_uniform_values
+    q: 64
+    min: 64
+    max: 256
+  window_size:
+    distribution: q_log_uniform_values
+    q: 64
+    min: 128
+    max: 512
+  mpl_dim:
+    distribution: q_log_uniform_values
+    q: 64
+    min: 128
+    max: 512
+  dropout:
+    distribution: uniform
+    min: 0.1
+    max: 0.5
+  emb_dropout:
+    distribution: uniform
+    min: 0.1
+    max: 0.5
+  depth:
+    distribution: q_log_uniform_values
+    q: 1
+    min: 1
+    max: 3
+  heads:
+    distribution: q_log_uniform_values
+    q: 2
+    min: 2
+    max: 8
+  dim:
+    distribution: q_log_uniform_values
+    q: 32
+    min: 32
+    max: 512
+  overlap:
+    distribution: q_log_uniform_values
+    q: 16
+    min: 16
+    max: 512
+  patch_size:
+    distribution: q_log_uniform_values
+    q: 4
+    min: 4
+    max: 512

@@ -5,7 +5,7 @@ from scipy.io import loadmat
 import torch
 from torch.utils import data
 
-from utils import labels_to_onehot
+from .utils import labels_to_onehot
 
 gesture_names = [
     "rest",
@@ -28,14 +28,14 @@ def get_raw_mad_dataset(eval_path, window_length, overlap):
     person_folders = os.listdir(eval_path)
 
     first_folder = os.listdir(eval_path)[0]
-    keys = next(os.walk((eval_path+first_folder)))[1]
+    keys = next(os.walk((eval_path + first_folder)))[1]
 
     number_of_classes = 7
     size_non_overlap = window_length - overlap
 
     raw_dataset_dict = {}
     for key in keys:
-            
+
         raw_dataset = {
             'examples': [],
             'labels': [],
@@ -47,7 +47,7 @@ def get_raw_mad_dataset(eval_path, window_length, overlap):
             data_path = eval_path + person_dir + '/' + key
             for data_file in os.listdir(data_path):
                 if (data_file.endswith(".dat")):
-                    data_read_from_file = np.fromfile((data_path+'/'+data_file), dtype=np.int16)
+                    data_read_from_file = np.fromfile((data_path + '/' + data_file), dtype=np.int16)
                     data_read_from_file = np.array(data_read_from_file, dtype=np.float32)
 
                     dataset_example_formatted = []
@@ -88,14 +88,14 @@ def get_mad_windows_dataset(mad_base_dir, _, window_length, overlap):
     train_raw_dataset_dict = get_raw_mad_dataset(train_path, window_length, overlap)
 
     mad_all_windows = eval_raw_dataset_dict['training0']['examples'] + \
-                        eval_raw_dataset_dict['Test0']['examples'] + \
-                        eval_raw_dataset_dict['Test1']['examples'] + \
-                        train_raw_dataset_dict['training0']['examples']
+                      eval_raw_dataset_dict['Test0']['examples'] + \
+                      eval_raw_dataset_dict['Test1']['examples'] + \
+                      train_raw_dataset_dict['training0']['examples']
 
     mad_all_labels = eval_raw_dataset_dict['training0']['labels'] + \
-                        eval_raw_dataset_dict['Test0']['labels'] + \
-                        eval_raw_dataset_dict['Test1']['labels'] + \
-                        train_raw_dataset_dict['training0']['labels']
+                     eval_raw_dataset_dict['Test0']['labels'] + \
+                     eval_raw_dataset_dict['Test1']['labels'] + \
+                     train_raw_dataset_dict['training0']['labels']
 
     # filter by labels
     mad_windows = None
@@ -117,7 +117,7 @@ def get_mad_windows_dataset(mad_base_dir, _, window_length, overlap):
     return mad_windows, mad_onehot_labels
 
 
-def create_ninapro_windows(X, y, stride, window_length, desired_labels = None):
+def create_ninapro_windows(X, y, stride, window_length, desired_labels=None):
     features_dataset = {key: [] for key in np.unique(y)}
     last_class_idx = None
     consequetive_features = []
@@ -169,11 +169,11 @@ def get_ninapro_windows_dataset(ninapro_base_dir, emg_range, window_length, over
                 ninapro_s_x = np.interp(ninapro_s_x_raw, emg_range, (-1, +1))
                 ninapro_s_y = ninapro_s1['restimulus'].squeeze()
 
-                subject_windows, subject_labels = create_ninapro_windows(X = ninapro_s_x,
-                                                                 y = ninapro_s_y,
-                                                                 stride = stride,
-                                                                 window_length = window_length,
-                                                                 desired_labels = [0,13,14,15,16],)
+                subject_windows, subject_labels = create_ninapro_windows(X=ninapro_s_x,
+                                                                         y=ninapro_s_y,
+                                                                         stride=stride,
+                                                                         window_length=window_length,
+                                                                         desired_labels=[0, 13, 14, 15, 16], )
 
                 if ninapro_windows is None:
                     ninapro_windows = subject_windows
@@ -182,15 +182,15 @@ def get_ninapro_windows_dataset(ninapro_base_dir, emg_range, window_length, over
                     ninapro_windows = np.concatenate((ninapro_windows, subject_windows))
                     ninapro_labels = np.concatenate((ninapro_labels, subject_labels))
 
-    ninapro_windows = ninapro_windows.swapaxes(1,2)
+    ninapro_windows = ninapro_windows.swapaxes(1, 2)
 
     # replace labels
     label_map = {0: 0,
-                13: 2,
-                14: 4,
-                15: 1,
-                16: 3,
-                }
+                 13: 2,
+                 14: 4,
+                 15: 1,
+                 16: 3,
+                 }
 
     ninapro_mapped_labels = np.vectorize(label_map.get)(ninapro_labels)
     ninapro_onehot_labels = np.array([labels_to_onehot(label) for label in ninapro_mapped_labels])
@@ -204,16 +204,13 @@ class EMGWindowsDataset(data.Dataset):
         'ninapro5_test': ('datasets/ninapro/DB5/test/', get_ninapro_windows_dataset),
         'mad': ('datasets/MyoArmbandDataset/', get_mad_windows_dataset),
     }
-    def __init__(self, dataset_name, window_size=200, overlap=0, emg_range=(-128,127)):
+
+    def __init__(self, dataset_name, window_size=200, overlap=0, emg_range=(-128, 127)):
         assert dataset_name in self.DATASET_DIRS, f'Dataset not found, please pick one of {list(self.DATASET_DIRS.keys())}'
 
         base_dir, load_dataset = self.DATASET_DIRS[dataset_name]
 
-        self.windows, self.labels = load_dataset(base_dir,
-                                                 emg_range,
-                                                 window_size,
-                                                 overlap)
-
+        self.windows, self.labels = load_dataset(base_dir, emg_range, window_size, overlap)
 
         self.windows = torch.tensor(self.windows, dtype=torch.float32)
         self.labels = torch.tensor(self.labels, dtype=torch.float32)
@@ -222,13 +219,14 @@ class EMGWindowsDataset(data.Dataset):
         return len(self.windows)
 
     def __getitem__(self, idx):
-        x_tensor = self.windows[idx,:,:]
+        x_tensor = self.windows[idx, :, :]
         y_tensor = self.labels[idx]
         return x_tensor, y_tensor
-    
+
     @property
     def num_unique_labels(self):
         return self.labels.shape[1]
+
 
 class NinaPro1(data.Dataset[data.TensorDataset]):
     def __init__(self):
@@ -270,20 +268,21 @@ class CombinedDataset(data.Dataset):
 
     def __getitem__(self, idx):
         if idx < len(self.dataset1):
-            x_tensor = self.dataset1.windows[idx,:,:] 
+            x_tensor = self.dataset1.windows[idx, :, :]
             y_tensor = self.dataset1.labels[idx]
-            return x_tensor, y_tensor 
+            return x_tensor, y_tensor
         else:
             # Adjust the idx for the second dataset
             idx -= len(self.dataset1)
-            x_tensor = self.dataset2.windows[idx,:,:] 
+            x_tensor = self.dataset2.windows[idx, :, :]
             y_tensor = self.dataset2.labels[idx]
-            return x_tensor, y_tensor 
+            return x_tensor, y_tensor
 
     @property
     def num_unique_labels(self):
         assert self.dataset1.labels.shape[1] == self.dataset2.labels.shape[1], 'labels of both datasets must match'
         return self.dataset1.labels.shape[1]
+
 
 class EMGWindowsAdaptattionDataset(data.Dataset):
     def __init__(self, windows, labels):
@@ -294,10 +293,10 @@ class EMGWindowsAdaptattionDataset(data.Dataset):
         return len(self.windows)
 
     def __getitem__(self, idx):
-        x_tensor = self.windows[idx,:,:]
+        x_tensor = self.windows[idx, :, :]
         y_tensor = self.labels[idx]
         return x_tensor, y_tensor
-    
+
     @property
     def num_unique_labels(self):
         return self.labels.shape[1]
