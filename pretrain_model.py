@@ -127,6 +127,7 @@ def train_emg_decoder(dataset_name="mad"):
 
 if __name__ == '__main__':
     random_seed = 100
+    # :)
     torch.manual_seed(random_seed)
 
     train_emg_decoder()
