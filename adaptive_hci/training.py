@@ -1,19 +1,18 @@
-import torch
-import wandb
 import numpy as np
-from sklearn.metrics import accuracy_score, mean_squared_error, f1_score
+import torch
+from sklearn import metrics
 
 
-def train_model(model,
-                optimizer,
-                criterion,
-                device,
-                train_dataloader,
-                test_dataloader=None,
-                model_name=None,
-                epochs=10,
-                wandb_logging=False,):
-
+def train_model(
+        model,
+        optimizer,
+        criterion,
+        device,
+        train_dataloader,
+        test_dataloader=None,
+        model_name=None,
+        epochs=10,
+        wandb_logging=False, ):
     history = {
         'test_accs': [],
         'test_f1s': [],
@@ -22,7 +21,6 @@ def train_model(model,
     }
 
     for epoch in range(epochs):
-
         train_losses = []
         for i, data in enumerate(train_dataloader, 0):
             model.train()
@@ -65,9 +63,9 @@ def train_model(model,
                     predicted_onehot[predictions > 0.7] = 1
 
                 test_labels = test_labels.cpu()
-                test_acc = accuracy_score(test_labels, predicted_onehot)
-                test_f1 = f1_score(test_labels, predicted_onehot, average='micro')
-                test_mse = mean_squared_error(test_labels, predictions)
+                test_acc = metrics.accuracy_score(test_labels, predicted_onehot)
+                test_f1 = metrics.f1_score(test_labels, predicted_onehot, average='micro')
+                test_mse = metrics.mean_squared_error(test_labels, predictions)
 
                 test_accs.append(test_acc)
                 test_f1s.append(test_f1)
@@ -76,13 +74,13 @@ def train_model(model,
             test_mean_accs = np.mean(test_accs)
             test_mean_f1s = np.mean(test_f1s)
             test_mse = np.mean(test_mse_list)
-        
+
             history['test_accs'].append(test_mean_accs)
             history['test_f1s'].append(test_mean_f1s)
             history['test_mse'].append(test_mse)
 
         if wandb_logging:
-            wandb.log({
+            wandb_logging.add_scalars({
                 'test_acc': test_mean_accs,
                 'test_f1': test_mean_f1s,
                 'test_mse': test_mse,
