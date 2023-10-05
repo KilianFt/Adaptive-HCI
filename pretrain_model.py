@@ -20,8 +20,8 @@ def get_dataset_(config, dataset_name):
     train_size = int(train_ratio * total_dataset_size)
     val_size = total_dataset_size - train_size
     train_dataset, test_dataset = random_split(dataset, [train_size, val_size])
-    train_dataloader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
-    test_dataloader = DataLoader(test_dataset, batch_size=config.batch_size, shuffle=True)
+    train_dataloader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True, drop_last=True)
+    test_dataloader = DataLoader(test_dataset, batch_size=config.batch_size, shuffle=True, drop_last=True)
     return train_dataloader, test_dataloader, n_labels
 
 
