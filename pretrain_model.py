@@ -20,8 +20,8 @@ def get_dataset_(config, dataset_name):
     train_size = int(train_ratio * total_dataset_size)
     val_size = total_dataset_size - train_size
     train_dataset, test_dataset = random_split(dataset, [train_size, val_size])
-    train_dataloader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
-    test_dataloader = DataLoader(test_dataset, batch_size=config.batch_size, shuffle=True)
+    train_dataloader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True, drop_last=True)
+    test_dataloader = DataLoader(test_dataset, batch_size=config.batch_size, shuffle=True, drop_last=True)
     return train_dataloader, test_dataloader, n_labels
 
 
@@ -73,6 +73,7 @@ def train_emg_decoder(dataset_name="mad"):
         'emb_dropout': 0.277,
         'channels': 1,
         'random_seed': random_seed,
+        'save_checkpoints': False,
     }
     tb = buddy_setup(config)
     config = tb.run.config
@@ -111,13 +112,15 @@ def train_emg_decoder(dataset_name="mad"):
         model_name=model_name,
         epochs=config.epochs,
         wandb_logging=tb,
+        save_checkpoints=config.save_checkpoints,
     )
 
     print('Best model epoch', np.argmax(history['test_accs']))
 
-    model_save_path = f"models/{model_name}.pt"
-    print('Saved model at', model_save_path)
-    torch.save(model.cpu(), model_save_path)
+    if config.save_checkpoints:
+        model_save_path = f"models/{model_name}.pt"
+        print('Saved model at', model_save_path)
+        torch.save(model.cpu(), model_save_path)
 
     return model
 
