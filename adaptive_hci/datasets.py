@@ -214,6 +214,10 @@ class EMGWindowsDataset(data.Dataset):
         'ninapro5_test': ('datasets/ninapro/DB5/test/', get_ninapro_windows_dataset),
         'mad': ('datasets/MyoArmbandDataset/', get_mad_windows_dataset),
     }
+    # Mila server, it's a hack.
+    if os.path.exists("/home/mila/d/delvermm/scratch/"):
+        for key, value in DATASET_DIRS.items():
+            DATASET_DIRS[key] = (os.path.join("/home/mila/d/delvermm/scratch/", value[0]), value[1])
 
     def __init__(self, dataset_name, window_size=200, overlap=0, emg_range=(-128, 127)):
         assert dataset_name in self.DATASET_DIRS, f'Dataset not found, please pick one of {list(self.DATASET_DIRS.keys())}'

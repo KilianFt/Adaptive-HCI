@@ -51,7 +51,7 @@ def get_dataset(config, name):
 
 def train_emg_decoder(dataset_name="mad"):
     if torch.cuda.is_available():
-        device = 'mps'
+        device = 'auto'
     else:
         device = 'cpu'
 
@@ -127,6 +127,7 @@ def train_emg_decoder(dataset_name="mad"):
 
 if __name__ == '__main__':
     random_seed = 100
+    # :)
     torch.manual_seed(random_seed)
 
     train_emg_decoder()

@@ -63,6 +63,6 @@ parameters:
     max: 512
   patch_size:
     distribution: q_log_uniform_values
-    q: 8
-    min: 8
-    max: 512
+    q: 2
+    min: 1
+    max: 8
