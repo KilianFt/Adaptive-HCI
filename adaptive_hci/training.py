@@ -12,7 +12,9 @@ def train_model(
         test_dataloader=None,
         model_name=None,
         epochs=10,
-        wandb_logging=False, ):
+        wandb_logging=False,
+        save_checkpoints=False,
+):
     history = {
         'test_accs': [],
         'test_f1s': [],
@@ -89,7 +91,7 @@ def train_model(
 
         history['train_loss'].append(train_loss)
 
-        if model_name is not None:
+        if model_name is not None and save_checkpoints:
             model_state_dict_save_path = f"models/{model_name}_state_dict_epoch_{epoch}.pth"
             torch.save(model.state_dict(), model_state_dict_save_path)
 
