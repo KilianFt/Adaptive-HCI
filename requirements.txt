@@ -5,3 +5,4 @@ stable_baselines3
 pyautogui
 gymnasium-robotics
 vit-pytorch
+wandb
