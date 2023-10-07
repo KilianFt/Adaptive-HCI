@@ -1,5 +1,9 @@
+from typing import Optional
+
 import numpy as np
 import torch
+import tqdm
+import wandb.sdk.wandb_run
 from sklearn import metrics
 
 
@@ -12,7 +16,7 @@ def train_model(
         test_dataloader=None,
         model_name=None,
         epochs=10,
-        wandb_logging=False,
+        wandb_logging: Optional[wandb.sdk.wandb_run.Run] = None,
         save_checkpoints=False,
 ):
     history = {
@@ -22,7 +26,7 @@ def train_model(
         'train_loss': [],
     }
 
-    for epoch in range(epochs):
+    for epoch in tqdm.trange(epochs):
         train_losses = []
         for i, data in enumerate(train_dataloader, 0):
             model.train()
@@ -81,15 +85,16 @@ def train_model(
             history['test_f1s'].append(test_mean_f1s)
             history['test_mse'].append(test_mse)
 
+        history['train_loss'].append(train_loss)
+
         if wandb_logging:
-            wandb_logging.add_scalars({
+            wandb_logging.log({
                 'test_acc': test_mean_accs,
                 'test_f1': test_mean_f1s,
                 'test_mse': test_mse,
                 'train_loss': train_loss,
-            })
-
-        history['train_loss'].append(train_loss)
+            }, step=epoch, commit=True)
+            # wandb_logging.dump(epoch)
 
         if model_name is not None and save_checkpoints:
             model_state_dict_save_path = f"models/{model_name}_state_dict_epoch_{epoch}.pth"

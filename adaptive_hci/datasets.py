@@ -1,4 +1,5 @@
 import os
+import time
 
 import numpy as np
 from scipy.io import loadmat
@@ -83,9 +84,27 @@ def get_raw_mad_dataset(eval_path, window_length, overlap):
 def maybe_download_mad_dataset(mad_base_dir):
     if os.path.exists(mad_base_dir):
         return
+    print("MyoArmbandDataset not found")
+
+    if os.path.exists(mad_base_dir + '/.lock'):
+        print("Waiting for download to finish")
+        # wait for download to finish
+        while os.path.exists(mad_base_dir + '/.lock'):
+            print(".", end="")
+            time.sleep(1)
+        return
 
     os.makedirs(mad_base_dir, exist_ok=True)
+
+    # create a lock file to prevent multiple downloads
+    os.system(f'touch {mad_base_dir}/.lock')
+
+    print("Downloading MyoArmbandDataset")
     os.system(f'git clone https://github.com/UlysseCoteAllard/MyoArmbandDataset {mad_base_dir}')
+    print("Download finished")
+
+    # remove the lock file
+    os.system(f'rm {mad_base_dir}/.lock')
 
 
 def get_mad_windows_dataset(mad_base_dir, _, window_length, overlap):
@@ -97,15 +116,19 @@ def get_mad_windows_dataset(mad_base_dir, _, window_length, overlap):
     eval_raw_dataset_dict = get_raw_mad_dataset(eval_path, window_length, overlap)
     train_raw_dataset_dict = get_raw_mad_dataset(train_path, window_length, overlap)
 
-    mad_all_windows = eval_raw_dataset_dict['training0']['examples'] + \
-                      eval_raw_dataset_dict['Test0']['examples'] + \
-                      eval_raw_dataset_dict['Test1']['examples'] + \
-                      train_raw_dataset_dict['training0']['examples']
+    mad_all_windows = (
+            eval_raw_dataset_dict['training0']['examples'] +
+            eval_raw_dataset_dict['Test0']['examples'] +
+            eval_raw_dataset_dict['Test1']['examples'] +
+            train_raw_dataset_dict['training0']['examples']
+    )
 
-    mad_all_labels = eval_raw_dataset_dict['training0']['labels'] + \
-                     eval_raw_dataset_dict['Test0']['labels'] + \
-                     eval_raw_dataset_dict['Test1']['labels'] + \
-                     train_raw_dataset_dict['training0']['labels']
+    mad_all_labels = (
+            eval_raw_dataset_dict['training0']['labels'] +
+            eval_raw_dataset_dict['Test0']['labels'] +
+            eval_raw_dataset_dict['Test1']['labels'] +
+            train_raw_dataset_dict['training0']['labels']
+    )
 
     # filter by labels
     mad_windows = None
@@ -124,6 +147,7 @@ def get_mad_windows_dataset(mad_base_dir, _, window_length, overlap):
 
     mad_onehot_labels = np.array([labels_to_onehot(label) for label in mad_labels])
 
+    print("MAD dataset loaded")
     return mad_windows, mad_onehot_labels
 
 
@@ -214,6 +238,10 @@ class EMGWindowsDataset(data.Dataset):
         'ninapro5_test': ('datasets/ninapro/DB5/test/', get_ninapro_windows_dataset),
         'mad': ('datasets/MyoArmbandDataset/', get_mad_windows_dataset),
     }
+    # Mila server, it's a hack.
+    if os.path.exists("/home/mila/d/delvermm/scratch/"):
+        for key, value in DATASET_DIRS.items():
+            DATASET_DIRS[key] = (os.path.join("/home/mila/d/delvermm/scratch/", value[0]), value[1])
 
     def __init__(self, dataset_name, window_size=200, overlap=0, emg_range=(-128, 127)):
         assert dataset_name in self.DATASET_DIRS, f'Dataset not found, please pick one of {list(self.DATASET_DIRS.keys())}'

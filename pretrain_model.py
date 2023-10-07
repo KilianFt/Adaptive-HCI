@@ -10,6 +10,7 @@ from vit_pytorch import ViT
 from adaptive_hci.datasets import CombinedDataset, EMGWindowsDataset
 from adaptive_hci.training import train_model
 from deployment.buddy import buddy_setup
+from utils import get_device
 
 
 def get_dataset_(config, dataset_name):
@@ -50,10 +51,8 @@ def get_dataset(config, name):
 
 
 def train_emg_decoder(dataset_name="mad"):
-    if torch.cuda.is_available():
-        device = 'mps'
-    else:
-        device = 'cpu'
+    device = get_device()
+    print('Using device:', device)
 
     config = {
         'pretrained': False,
@@ -127,6 +126,7 @@ def train_emg_decoder(dataset_name="mad"):
 
 if __name__ == '__main__':
     random_seed = 100
+    # :)
     torch.manual_seed(random_seed)
 
     train_emg_decoder()
