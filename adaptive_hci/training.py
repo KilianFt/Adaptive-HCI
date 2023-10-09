@@ -16,7 +16,7 @@ def train_model(
         test_dataloader=None,
         model_name=None,
         epochs=10,
-        wandb_logging: Optional[wandb.sdk.wandb_run.Run] = None,
+        logger: Optional[wandb.sdk.wandb_run.Run] = None,
         save_checkpoints=False,
 ):
     history = {
@@ -35,6 +35,7 @@ def train_model(
             train_inputs = train_inputs.to(device)
             train_labels = train_labels.to(device)
 
+            # TODO We should have a wrapper e.g. EMGVit that does the unsqueeze
             if model.__class__.__name__ == 'ViT':
                 train_inputs.unsqueeze_(axis=1)
 
@@ -58,6 +59,7 @@ def train_model(
                 test_inputs, test_labels = data
                 test_inputs = test_inputs.to(device)
                 test_labels = test_labels.to(device)
+                # TODO: We should have a wrapper e.g. EMGVit that does the unsqueeze
                 if model.__class__.__name__ == 'ViT':
                     test_inputs.unsqueeze_(axis=1)
                 model.eval()
@@ -87,14 +89,13 @@ def train_model(
 
         history['train_loss'].append(train_loss)
 
-        if wandb_logging:
-            wandb_logging.log({
+        if logger:
+            logger.log({
                 'test_acc': test_mean_accs,
                 'test_f1': test_mean_f1s,
                 'test_mse': test_mse,
                 'train_loss': train_loss,
             }, step=epoch, commit=True)
-            # wandb_logging.dump(epoch)
 
         if model_name is not None and save_checkpoints:
             model_state_dict_save_path = f"models/{model_name}_state_dict_epoch_{epoch}.pth"

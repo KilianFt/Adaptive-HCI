@@ -1,29 +1,22 @@
+import dataclasses
 import os
 import sys
-
+import configs
 import experiment_buddy
 
 
-def buddy_setup(hyper, entity="delvermm"):
-    if not isinstance(hyper, dict):
-        hyper = vars(hyper)
-    experiment_buddy.register_defaults(hyper)
+def buddy_setup(exp_config: configs.BaseConfig, entity="delvermm"):
     import wandb
     wandb_kwargs = dict(
-        monitor_gym=False, entity=entity, settings=wandb.Settings(start_method="thread"), save_code=True)
-    # esh = ""
-    # hostname = ""
-    # sweep_config = ""
-    # hostname = "cc-beluga"
-    # hostname = "cc-cedar"
-    # hostname = "mila"
-    hostname = "mila"
-    # sweep_config = ""
-    sweep_config = "sweep.yaml"
-    # proc_num = -1
-    proc_num = 1
-    if sweep_config:
-        proc_num = 4
+        monitor_gym=False,
+        entity=entity,
+        settings=wandb.Settings(start_method="thread"),
+        save_code=True,
+        config=dataclasses.asdict(exp_config)
+    )
+    hostname = exp_config.hostname
+    sweep_config = exp_config.sweep_config
+    proc_num = exp_config.proc_num
 
     # hostname = "aws://t4g.micro"
     if sys.gettrace() is not None and os.environ.get("BUDDY_DEBUG_DEPLOYMENT") is None:
@@ -70,4 +63,5 @@ def buddy_setup(hyper, entity="delvermm"):
             proc_num=proc_num,
             extra_modules=extra_modules
         )
-    return tb
+    exp_config = configs.BaseConfig(**tb.run.config)
+    return tb, exp_config

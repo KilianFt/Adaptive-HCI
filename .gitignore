@@ -5,6 +5,7 @@ __pycache__/
 wandb/
 tmp/
 models/
+cache/
 *.pkl
 *.pt
 *.png
@@ -13,3 +14,4 @@ models/
 *.DS_STORE
 
 
+/runs/

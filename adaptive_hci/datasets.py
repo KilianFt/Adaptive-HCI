@@ -47,7 +47,7 @@ def get_raw_mad_dataset(eval_path, window_length, overlap):
             labels = []
             data_path = eval_path + person_dir + '/' + key
             for data_file in os.listdir(data_path):
-                if (data_file.endswith(".dat")):
+                if data_file.endswith(".dat"):
                     data_read_from_file = np.fromfile((data_path + '/' + data_file), dtype=np.int16)
                     data_read_from_file = np.array(data_read_from_file, dtype=np.float32)
 

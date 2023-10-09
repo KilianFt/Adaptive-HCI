@@ -15,6 +15,7 @@ from adaptive_hci.utils import onehot_to_dof
 from adaptive_hci.metrics import plot_and_mean
 from adaptive_hci import users
 
+
 def deterministic_rollout(environment, controller):
     observation, info = environment.reset()
     observation = torch.tensor(observation)
@@ -89,7 +90,7 @@ def train_sl(environment,
     for epoch in tqdm.trange(epochs):
         states, user_signals, actions, optimal_actions, rewards, episode_duration, goal = deterministic_rollout(
             environment, controller)
-        
+
         if epoch > 0 and epoch % n_episodes_per_train == 0 and do_training:
             loss = controller.sl_update(user_signals, optimal_actions)
             if epoch % checkpoint_every == 0:
@@ -118,6 +119,7 @@ def train_sl(environment,
         episodes.append(episode_results)
 
     return episodes, sl_losses
+
 
 def main():
     parser = argparse.ArgumentParser(prog='Adaptive HCI - Fetch')

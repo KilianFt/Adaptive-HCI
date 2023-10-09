@@ -1,3 +1,4 @@
+import dataclasses
 import datetime
 
 import numpy as np
@@ -10,7 +11,8 @@ from vit_pytorch import ViT
 from adaptive_hci.datasets import CombinedDataset, EMGWindowsDataset
 from adaptive_hci.training import train_model
 from deployment.buddy import buddy_setup
-from utils import get_device
+import utils
+import configs
 
 
 def get_dataset_(config, dataset_name):
@@ -26,6 +28,7 @@ def get_dataset_(config, dataset_name):
     return train_dataloader, test_dataloader, n_labels
 
 
+@utils.disk_cache
 def get_dataset(config, name):
     mad_dataset = EMGWindowsDataset(
         'mad',
@@ -51,52 +54,30 @@ def get_dataset(config, name):
 
 
 def train_emg_decoder(dataset_name="mad"):
-    device = get_device()
+    experiment_config = configs.BaseConfig()
+    device = utils.get_device()
     print('Using device:', device)
 
-    config = {
-        'pretrained': False,
-        'early_stopping': False,
-        'epochs': 40,
-        'batch_size': 32,
-        'lr': 0.0007,
-        'window_size': 200,
-        'overlap': 150,
-        'model_class': 'ViT',
-        'patch_size': 8,
-        'dim': 64,
-        'depth': 1,
-        'heads': 2,
-        'mlp_dim': 128,
-        'dropout': 0.177,
-        'emb_dropout': 0.277,
-        'channels': 1,
-        'random_seed': random_seed,
-        'save_checkpoints': False,
-    }
-    tb = buddy_setup(config)
-    config = tb.run.config
+    logger, experiment_config = buddy_setup(experiment_config)
 
-    train_dataloader, test_dataloader, n_labels = get_dataset_(config, dataset_name)
+    train_dataloader, test_dataloader, n_labels = get_dataset_(experiment_config, dataset_name)
 
     model = ViT(
-        image_size=config.window_size,
-        patch_size=config.patch_size,
+        image_size=experiment_config.window_size,
+        patch_size=experiment_config.patch_size,
         num_classes=n_labels,
-        dim=config.dim,
-        depth=config.depth,
-        heads=config.heads,
-        mlp_dim=config.mlp_dim,
-        dropout=config.dropout,
-        emb_dropout=config.emb_dropout,
-        channels=config.channels,
+        dim=experiment_config.dim,
+        depth=experiment_config.depth,
+        heads=experiment_config.heads,
+        mlp_dim=experiment_config.mlp_dim,
+        dropout=experiment_config.dropout,
+        emb_dropout=experiment_config.emb_dropout,
+        channels=experiment_config.channels,
     ).to(device=device)
 
+    assert experiment_config.loss in ["MSELoss"], "Only MSELoss is supported for now"
     criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=config.lr)
-
-    config.loss = criterion.__class__.__name__
-    config.model_class = model.__class__.__name__
+    optimizer = optim.Adam(model.parameters(), lr=experiment_config.lr)
 
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     model_name = f"pretrained_{timestamp}"
@@ -109,14 +90,14 @@ def train_emg_decoder(dataset_name="mad"):
         test_dataloader=test_dataloader,
         device=device,
         model_name=model_name,
-        epochs=config.epochs,
-        wandb_logging=tb,
-        save_checkpoints=config.save_checkpoints,
+        epochs=experiment_config.epochs,
+        logger=logger,
+        save_checkpoints=experiment_config.save_checkpoints,
     )
 
     print('Best model epoch', np.argmax(history['test_accs']))
 
-    if config.save_checkpoints:
+    if experiment_config.save_checkpoints:
         model_save_path = f"models/{model_name}.pt"
         print('Saved model at', model_save_path)
         torch.save(model.cpu(), model_save_path)
@@ -125,8 +106,5 @@ def train_emg_decoder(dataset_name="mad"):
 
 
 if __name__ == '__main__':
-    random_seed = 100
-    # :)
-    torch.manual_seed(random_seed)
-
+    torch.manual_seed(configs.BaseConfig.random_seed)
     train_emg_decoder()

@@ -154,7 +154,7 @@ def main(config=None):
                                      test_dataloader=val_dataloader,
                                      device=device,
                                      epochs=config.epochs,
-                                     wandb_logging=wandb.run)
+                                     logger=wandb.run)
 
         fold_results['test_accs'].append(history['test_accs'])
         fold_results['test_f1s'].append(history['test_f1s'])
