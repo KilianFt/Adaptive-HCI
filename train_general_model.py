@@ -53,7 +53,7 @@ def get_dataset(config, name):
     return dataset
 
 
-def train_emg_decoder(dataset_name="mad"):
+def train_general_model(dataset_name="mad"):
     experiment_config = configs.BaseConfig()
     device = utils.get_device()
     print('Using device:', device)
@@ -107,4 +107,4 @@ def train_emg_decoder(dataset_name="mad"):
 
 if __name__ == '__main__':
     torch.manual_seed(configs.BaseConfig.random_seed)
-    train_emg_decoder()
+    train_general_model()
