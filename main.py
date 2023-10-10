@@ -1,9 +1,8 @@
 import hashlib
 
 import configs
-from common import DataSourceEnum
-import train_general_model
 import finetune_user_model
+import train_general_model
 from deployment.buddy import buddy_setup
 
 train_users = [
