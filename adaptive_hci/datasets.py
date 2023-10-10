@@ -6,6 +6,7 @@ from scipy.io import loadmat
 import torch
 from torch.utils import data
 
+from common import DataSourceEnum
 from .utils import labels_to_onehot
 
 gesture_names = [
@@ -234,21 +235,31 @@ def get_ninapro_windows_dataset(ninapro_base_dir, emg_range, window_length, over
 
 class EMGWindowsDataset(data.Dataset):
     DATASET_DIRS = {
-        'ninapro5_train': ('datasets/ninapro/DB5/train/', get_ninapro_windows_dataset),
-        'ninapro5_test': ('datasets/ninapro/DB5/test/', get_ninapro_windows_dataset),
-        'mad': ('datasets/MyoArmbandDataset/', get_mad_windows_dataset),
+        DataSourceEnum.NINA_PRO: ('datasets/ninapro/DB5', get_ninapro_windows_dataset),
+        DataSourceEnum.MAD: ('datasets/MyoArmbandDataset/', get_mad_windows_dataset),
+        DataSourceEnum.MiniMAD: ('datasets/MyoArmbandDataset/', get_mad_windows_dataset),
     }
     # Mila server, it's a hack.
     if os.path.exists("/home/mila/d/delvermm/scratch/"):
         for key, value in DATASET_DIRS.items():
             DATASET_DIRS[key] = (os.path.join("/home/mila/d/delvermm/scratch/", value[0]), value[1])
 
-    def __init__(self, dataset_name, window_size=200, overlap=0, emg_range=(-128, 127)):
-        assert dataset_name in self.DATASET_DIRS, f'Dataset not found, please pick one of {list(self.DATASET_DIRS.keys())}'
-
-        base_dir, load_dataset = self.DATASET_DIRS[dataset_name]
+    def __init__(
+            self,
+            data_source: DataSourceEnum,
+            split: str,
+            window_size=200,
+            overlap=0,
+            emg_range=(-128, 127),
+    ):
+        base_dir, load_dataset = self.DATASET_DIRS[data_source]
+        if data_source == DataSourceEnum.NINA_PRO:
+            base_dir += "_" + split
 
         self.windows, self.labels = load_dataset(base_dir, emg_range, window_size, overlap)
+        if data_source in (DataSourceEnum.MiniMAD,):
+            self.windows = self.windows[:10]
+            self.labels = self.labels[:10]
 
         self.windows = torch.tensor(self.windows, dtype=torch.float32)
         self.labels = torch.tensor(self.labels, dtype=torch.float32)

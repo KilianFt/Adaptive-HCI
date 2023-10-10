@@ -4,7 +4,7 @@ import torch
 from stable_baselines3 import PPO
 from torch.utils.data import DataLoader
 
-from train_general_model import train_general_model
+from train_general_model import main
 from training import train_model
 from datasets import EMGWindowsAdaptattionDataset
 class BaseController:
@@ -55,7 +55,7 @@ class SLOnlyController(BaseController):
         if model_path is not None:
             self.policy = torch.load(model_path).to(self.device)
         else:
-            self.policy = train_general_model()
+            self.policy = main()
 
         if n_frozen_layers >= 1:
             for i, param in enumerate(self.policy.to_patch_embedding.parameters()):

@@ -1,4 +1,3 @@
-import dataclasses
 import datetime
 
 import numpy as np
@@ -8,59 +7,65 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, random_split
 from vit_pytorch import ViT
 
+import configs
+from adaptive_hci import utils
 from adaptive_hci.datasets import CombinedDataset, EMGWindowsDataset
 from adaptive_hci.training import train_model
+from common import DataSourceEnum
 from deployment.buddy import buddy_setup
-import utils
-import configs
 
 
-def get_dataset_(config, dataset_name):
-    dataset = get_dataset(config, dataset_name)
-    n_labels = dataset.num_unique_labels
-    train_ratio = 0.8  # 80% of the data for training
-    total_dataset_size = len(dataset)
-    train_size = int(train_ratio * total_dataset_size)
-    val_size = total_dataset_size - train_size
-    train_dataset, test_dataset = random_split(dataset, [train_size, val_size])
-    train_dataloader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True, drop_last=False)
-    test_dataloader = DataLoader(test_dataset, batch_size=config.batch_size, shuffle=True, drop_last=False)
-    return train_dataloader, test_dataloader, n_labels
+def get_dataset_(config: configs.BaseConfig):
+    dataset = get_dataset(config)
+
+    train_dataset, test_dataset = random_split(dataset, [
+        1 - config.train_fraction, config.train_fraction])
+
+    dataloader_args = dict(batch_size=config.batch_size, shuffle=True, drop_last=False)
+
+    train_dataloader = DataLoader(train_dataset, **dataloader_args)
+    test_dataloader = DataLoader(test_dataset, **dataloader_args)
+    return train_dataloader, test_dataloader, dataset.num_unique_labels
 
 
 @utils.disk_cache
-def get_dataset(config, name):
-    mad_dataset = EMGWindowsDataset(
-        'mad',
+def get_dataset(config: configs.BaseConfig):
+    data_source = config.data_source
+    assert data_source not in (DataSourceEnum.NINA_PRO,), "not implemented, use merged to include it"
+
+    dataset = EMGWindowsDataset(
+        data_source,
+        split="Train",
         window_size=config.window_size,
         overlap=config.overlap
     )
-    if name == "ninapro":
+    if data_source == DataSourceEnum.MERGED:
         ninapro5_train_dataset = EMGWindowsDataset(
-            'ninapro5_train',
+            data_source,
+            split="train",
             window_size=config.window_size,
             overlap=config.overlap
         )
         ninapro5_test_dataset = EMGWindowsDataset(
-            'ninapro5_test',
+            data_source,
+            split="test",
             window_size=config.window_size,
             overlap=config.overlap
         )
         ninapro = CombinedDataset(ninapro5_test_dataset, ninapro5_train_dataset)
-        dataset = CombinedDataset(mad_dataset, ninapro)
+        dataset = CombinedDataset(dataset, ninapro)
+    elif data_source in (DataSourceEnum.MiniMAD, DataSourceEnum.MAD):
+        pass
     else:
-        dataset = mad_dataset
+        raise NotImplementedError(f"Unknown datasource {data_source}")
     return dataset
 
 
-def train_general_model(dataset_name="mad"):
-    experiment_config = configs.BaseConfig()
+def main(logger, experiment_config: configs.BaseConfig) -> nn.Module:
     device = utils.get_device()
     print('Using device:', device)
 
-    logger, experiment_config = buddy_setup(experiment_config)
-
-    train_dataloader, test_dataloader, n_labels = get_dataset_(experiment_config, dataset_name)
+    train_dataloader, test_dataloader, n_labels = get_dataset_(experiment_config)
 
     model = ViT(
         image_size=experiment_config.window_size,
@@ -80,7 +85,7 @@ def train_general_model(dataset_name="mad"):
     optimizer = optim.Adam(model.parameters(), lr=experiment_config.lr)
 
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    model_name = f"pretrained_{timestamp}"
+    model_name = f"pretrained_{timestamp}"  # TODO: replace with wandb.run.name
 
     model, history = train_model(
         model=model,
@@ -101,10 +106,10 @@ def train_general_model(dataset_name="mad"):
         model_save_path = f"models/{model_name}.pt"
         print('Saved model at', model_save_path)
         torch.save(model.cpu(), model_save_path)
-
     return model
 
 
 if __name__ == '__main__':
-    torch.manual_seed(configs.BaseConfig.random_seed)
-    train_general_model()
+    smoke_config = configs.SmokeConfig()
+    torch.manual_seed(smoke_config.random_seed)
+    main(smoke_config)
