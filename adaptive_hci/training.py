@@ -65,7 +65,7 @@ def train_model(
                 model.eval()
                 with torch.no_grad():
                     outputs = model(test_inputs)
-                    predictions = outputs.cpu().squeeze().numpy()
+                    predictions = outputs.squeeze(1).cpu().numpy()
 
                     predicted_onehot = np.zeros_like(predictions)
                     predicted_onehot[predictions > 0.7] = 1

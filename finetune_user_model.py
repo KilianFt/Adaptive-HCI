@@ -19,7 +19,8 @@ import torch.optim as optim
 from sklearn.metrics import accuracy_score
 from torch.utils.data import DataLoader
 
-import utils
+import configs
+from adaptive_hci import utils
 import wandb
 from adaptive_hci.datasets import EMGWindowsAdaptattionDataset
 from adaptive_hci.training import train_model
@@ -84,10 +85,9 @@ def load_fold_list(base_dir, filenames):
     return fold_list
 
 
-def main(config=None):
+def main(base_model, user_hash, config: configs.BaseConfig):
     device = utils.get_device()
-    run = wandb.init(tags=["offline_adaptation"], config=config)
-    config = wandb.config
+    run = wandb.init(tags=["offline_adaptation", user_hash], config=config, name=f"finetune_{config}_{user_hash[:15]}")
 
     online_data_dir = pathlib.Path('datasets/OnlineData')
     episode_filenames = os.listdir(online_data_dir)
@@ -97,6 +97,12 @@ def main(config=None):
     run.log_artifact(artifact)
 
     fold_list = load_fold_list(online_data_dir, episode_filenames)
+
+    # TODO: this should be a parameter of the smoke config, this check is an hack
+    # The config should have a parameter like num_folds, which can be None for all or 1,2,3, etc
+    is_smoke = isinstance(config, configs.SmokeConfig)
+    if is_smoke:
+        fold_list = fold_list[:2]
 
     fold_results = {
         'test_accs': [],
@@ -108,8 +114,12 @@ def main(config=None):
     for fold_idx in range(len(fold_list)):
         print('training fold', fold_idx)
         train_episodes = []
+        # This is not causal? we train on folds after the training ones? it should be fine for us but it's strange
         for sublist in fold_list[:fold_idx] + fold_list[fold_idx + 1:]:
             train_episodes += sublist
+
+        if is_smoke:
+            train_episodes = train_episodes[:1]
 
         val_episodes = fold_list[fold_idx]
 
@@ -131,6 +141,7 @@ def main(config=None):
         train_dataloader = DataLoader(train_offline_adaption_dataset, batch_size=config.batch_size, shuffle=True)
         val_dataloader = DataLoader(val_offline_adaption_dataset, batch_size=config.batch_size, shuffle=True)
 
+        # TODO: use base_model not this, at best base_model can be the path
         model = torch.load('models/pretrained_parameter_search.pt').to(device=device)
 
         if config.n_frozen_layers >= 1:
