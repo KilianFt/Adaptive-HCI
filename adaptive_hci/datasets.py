@@ -1,10 +1,12 @@
 import os
+import time
 
 import numpy as np
 from scipy.io import loadmat
 import torch
 from torch.utils import data
 
+from common import DataSourceEnum
 from .utils import labels_to_onehot
 
 gesture_names = [
@@ -46,7 +48,7 @@ def get_raw_mad_dataset(eval_path, window_length, overlap):
             labels = []
             data_path = eval_path + person_dir + '/' + key
             for data_file in os.listdir(data_path):
-                if (data_file.endswith(".dat")):
+                if data_file.endswith(".dat"):
                     data_read_from_file = np.fromfile((data_path + '/' + data_file), dtype=np.int16)
                     data_read_from_file = np.array(data_read_from_file, dtype=np.float32)
 
@@ -80,22 +82,54 @@ def get_raw_mad_dataset(eval_path, window_length, overlap):
     return raw_dataset_dict
 
 
+def maybe_download_mad_dataset(mad_base_dir):
+    if os.path.exists(mad_base_dir):
+        return
+    print("MyoArmbandDataset not found")
+
+    if os.path.exists(mad_base_dir + '/.lock'):
+        print("Waiting for download to finish")
+        # wait for download to finish
+        while os.path.exists(mad_base_dir + '/.lock'):
+            print(".", end="")
+            time.sleep(1)
+        return
+
+    os.makedirs(mad_base_dir, exist_ok=True)
+
+    # create a lock file to prevent multiple downloads
+    os.system(f'touch {mad_base_dir}/.lock')
+
+    print("Downloading MyoArmbandDataset")
+    os.system(f'git clone https://github.com/UlysseCoteAllard/MyoArmbandDataset {mad_base_dir}')
+    print("Download finished")
+
+    # remove the lock file
+    os.system(f'rm {mad_base_dir}/.lock')
+
+
 def get_mad_windows_dataset(mad_base_dir, _, window_length, overlap):
+    maybe_download_mad_dataset(mad_base_dir)
+
     train_path = mad_base_dir + 'PreTrainingDataset/'
     eval_path = mad_base_dir + 'EvaluationDataset/'
 
     eval_raw_dataset_dict = get_raw_mad_dataset(eval_path, window_length, overlap)
     train_raw_dataset_dict = get_raw_mad_dataset(train_path, window_length, overlap)
 
-    mad_all_windows = eval_raw_dataset_dict['training0']['examples'] + \
-                      eval_raw_dataset_dict['Test0']['examples'] + \
-                      eval_raw_dataset_dict['Test1']['examples'] + \
-                      train_raw_dataset_dict['training0']['examples']
+    mad_all_windows = (
+            eval_raw_dataset_dict['training0']['examples'] +
+            eval_raw_dataset_dict['Test0']['examples'] +
+            eval_raw_dataset_dict['Test1']['examples'] +
+            train_raw_dataset_dict['training0']['examples']
+    )
 
-    mad_all_labels = eval_raw_dataset_dict['training0']['labels'] + \
-                     eval_raw_dataset_dict['Test0']['labels'] + \
-                     eval_raw_dataset_dict['Test1']['labels'] + \
-                     train_raw_dataset_dict['training0']['labels']
+    mad_all_labels = (
+            eval_raw_dataset_dict['training0']['labels'] +
+            eval_raw_dataset_dict['Test0']['labels'] +
+            eval_raw_dataset_dict['Test1']['labels'] +
+            train_raw_dataset_dict['training0']['labels']
+    )
 
     # filter by labels
     mad_windows = None
@@ -114,6 +148,7 @@ def get_mad_windows_dataset(mad_base_dir, _, window_length, overlap):
 
     mad_onehot_labels = np.array([labels_to_onehot(label) for label in mad_labels])
 
+    print("MAD dataset loaded")
     return mad_windows, mad_onehot_labels
 
 
@@ -200,17 +235,31 @@ def get_ninapro_windows_dataset(ninapro_base_dir, emg_range, window_length, over
 
 class EMGWindowsDataset(data.Dataset):
     DATASET_DIRS = {
-        'ninapro5_train': ('datasets/ninapro/DB5/train/', get_ninapro_windows_dataset),
-        'ninapro5_test': ('datasets/ninapro/DB5/test/', get_ninapro_windows_dataset),
-        'mad': ('datasets/MyoArmbandDataset/', get_mad_windows_dataset),
+        DataSourceEnum.NINA_PRO: ('datasets/ninapro/DB5', get_ninapro_windows_dataset),
+        DataSourceEnum.MAD: ('datasets/MyoArmbandDataset/', get_mad_windows_dataset),
+        DataSourceEnum.MiniMAD: ('datasets/MyoArmbandDataset/', get_mad_windows_dataset),
     }
+    # Mila server, it's a hack.
+    if os.path.exists("/home/mila/d/delvermm/scratch/"):
+        for key, value in DATASET_DIRS.items():
+            DATASET_DIRS[key] = (os.path.join("/home/mila/d/delvermm/scratch/", value[0]), value[1])
 
-    def __init__(self, dataset_name, window_size=200, overlap=0, emg_range=(-128, 127)):
-        assert dataset_name in self.DATASET_DIRS, f'Dataset not found, please pick one of {list(self.DATASET_DIRS.keys())}'
-
-        base_dir, load_dataset = self.DATASET_DIRS[dataset_name]
+    def __init__(
+            self,
+            data_source: DataSourceEnum,
+            split: str,
+            window_size=200,
+            overlap=0,
+            emg_range=(-128, 127),
+    ):
+        base_dir, load_dataset = self.DATASET_DIRS[data_source]
+        if data_source == DataSourceEnum.NINA_PRO:
+            base_dir += "_" + split
 
         self.windows, self.labels = load_dataset(base_dir, emg_range, window_size, overlap)
+        if data_source in (DataSourceEnum.MiniMAD,):
+            self.windows = self.windows[:10]
+            self.labels = self.labels[:10]
 
         self.windows = torch.tensor(self.windows, dtype=torch.float32)
         self.labels = torch.tensor(self.labels, dtype=torch.float32)

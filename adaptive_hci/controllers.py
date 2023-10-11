@@ -4,7 +4,7 @@ import torch
 from stable_baselines3 import PPO
 from torch.utils.data import DataLoader
 
-from pretrain_model import train_emg_decoder
+from train_general_model import main
 from training import train_model
 from datasets import EMGWindowsAdaptattionDataset
 class BaseController:
@@ -55,12 +55,12 @@ class SLOnlyController(BaseController):
         if model_path is not None:
             self.policy = torch.load(model_path).to(self.device)
         else:
-            self.policy = train_emg_decoder()
+            self.policy = main()
 
         if n_frozen_layers >= 1:
-            for i, param in enumerate(self.policy.to_patch_embedding.parameters()):  
+            for i, param in enumerate(self.policy.to_patch_embedding.parameters()):
                 param.requires_grad = False
-            for i, param in enumerate(self.policy.dropout.parameters()):  
+            for i, param in enumerate(self.policy.dropout.parameters()):
                 param.requires_grad = False
 
         if n_frozen_layers >= 2:
@@ -78,7 +78,7 @@ class SLOnlyController(BaseController):
         with torch.no_grad():
             outputs = self.policy(emg_window_tensor)
         return outputs
-    
+
     def sl_update(self, states, optimal_actions):
         train_dataset = EMGWindowsAdaptattionDataset(windows=states, labels=optimal_actions)
 

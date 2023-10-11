@@ -4,25 +4,37 @@
 # - do you fine-tune pretrained model or initalize new from scratch?
 # - how often is re-init of weights beneficial?
 # - how to exploration?
-# 
+#
 
-import pickle
+import os
 import pathlib
-import dataclasses
+import pickle
+import subprocess
+import sys
 
-import wandb
 import numpy as np
-from sklearn.metrics import accuracy_score, f1_score
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from sklearn.metrics import accuracy_score
 from torch.utils.data import DataLoader
 
-from vit_pytorch import ViT
+import configs
+from adaptive_hci import utils
+import wandb
+from adaptive_hci.datasets import EMGWindowsAdaptattionDataset
+from adaptive_hci.training import train_model
 
-from datasets import EMGWindowsAdaptattionDataset
-from training import train_model
+base_configuration = {
+    'batch_size': 32,
+    'epochs': 50,
+    'lr': 0.005,
+    'n_frozen_layers': 2,
+    'window_size': 600,
+    'overlap': 100,
+    'model_class': 'ViT',
+}
+
 
 def predictions_to_onehot(predictions):
     predicted_labels = np.zeros_like(predictions)
@@ -30,7 +42,7 @@ def predictions_to_onehot(predictions):
     return predicted_labels
 
 
-class RLAccuracy():
+class RLAccuracy:
     def __init__(self, optimal_actions):
         self.optimal_actions = optimal_actions
 
@@ -38,6 +50,7 @@ class RLAccuracy():
         predictions = algo.predict(dataset.observations)
         onehot = predictions_to_onehot(predictions)
         return accuracy_score(self.optimal_actions, onehot)
+
 
 def get_terminals(episodes, rewards):
     terminals = np.zeros(rewards.shape[0])
@@ -48,9 +61,10 @@ def get_terminals(episodes, rewards):
         last_terminal_idx = term_idx
     return terminals
 
+
 def get_concatenated_arrays(episodes):
     actions = np.concatenate([predictions_to_onehot(e['actions'].detach().numpy()) \
-                                    for e in episodes]).squeeze()
+                              for e in episodes]).squeeze()
     optimal_actions = np.concatenate([e['optimal_actions'].detach().numpy() for e in episodes])
     observations = np.concatenate([e['user_signals'] for e in episodes]).squeeze()
     rewards = np.concatenate([e['rewards'] for e in episodes]).squeeze()
@@ -71,28 +85,24 @@ def load_fold_list(base_dir, filenames):
     return fold_list
 
 
-def main():
-    device = 'mps'
+def main(base_model, user_hash, config: configs.BaseConfig):
+    device = utils.get_device()
+    run = wandb.init(tags=["offline_adaptation", user_hash], config=config, name=f"finetune_{config}_{user_hash[:15]}")
 
-    run = wandb.init(
-        tags=["offline_adaptation"],
-    )
-
-    # load data
     online_data_dir = pathlib.Path('datasets/OnlineData')
-
-    episode_filenames = [
-        'episodes_2023-09-18_09-33-03.pkl',
-        'episodes_2023-09-18_09-42-15.pkl',
-        'episodes_2023-09-18_09-39-11.pkl',
-        'episodes_2023-09-18_09-44-40.pkl',
-    ]
+    episode_filenames = os.listdir(online_data_dir)
 
     artifact = wandb.Artifact(name="offline_adaptattion_data", type="dataset")
     artifact.add_dir(online_data_dir, name='offline_adaptattion_data')
     run.log_artifact(artifact)
 
     fold_list = load_fold_list(online_data_dir, episode_filenames)
+
+    # TODO: this should be a parameter of the smoke config, this check is an hack
+    # The config should have a parameter like num_folds, which can be None for all or 1,2,3, etc
+    is_smoke = isinstance(config, configs.SmokeConfig)
+    if is_smoke:
+        fold_list = fold_list[:2]
 
     fold_results = {
         'test_accs': [],
@@ -104,50 +114,44 @@ def main():
     for fold_idx in range(len(fold_list)):
         print('training fold', fold_idx)
         train_episodes = []
+        # This is not causal? we train on folds after the training ones? it should be fine for us but it's strange
         for sublist in fold_list[:fold_idx] + fold_list[fold_idx + 1:]:
             train_episodes += sublist
+
+        if is_smoke:
+            train_episodes = train_episodes[:1]
 
         val_episodes = fold_list[fold_idx]
 
         (train_observations,
-        train_actions,
-        train_optimal_actions,
-        train_rewards,
-        train_terminals) = get_concatenated_arrays(episodes=train_episodes)
+         train_actions,
+         train_optimal_actions,
+         train_rewards,
+         train_terminals) = get_concatenated_arrays(episodes=train_episodes)
 
         (val_observations,
-        val_actions,
-        val_optimal_actions,
-        val_rewards,
-        val_terminals) = get_concatenated_arrays(episodes=val_episodes)
+         val_actions,
+         val_optimal_actions,
+         val_rewards,
+         val_terminals) = get_concatenated_arrays(episodes=val_episodes)
 
         train_offline_adaption_dataset = EMGWindowsAdaptattionDataset(train_observations, train_optimal_actions)
         val_offline_adaption_dataset = EMGWindowsAdaptattionDataset(val_observations, val_optimal_actions)
 
-        train_dataloader = DataLoader(train_offline_adaption_dataset, batch_size=wandb.config.batch_size, shuffle=True)
-        val_dataloader = DataLoader(val_offline_adaption_dataset, batch_size=wandb.config.batch_size, shuffle=True)
+        train_dataloader = DataLoader(train_offline_adaption_dataset, batch_size=config.batch_size, shuffle=True)
+        val_dataloader = DataLoader(val_offline_adaption_dataset, batch_size=config.batch_size, shuffle=True)
 
+        # TODO: use base_model not this, at best base_model can be the path
         model = torch.load('models/pretrained_parameter_search.pt').to(device=device)
 
-        # Model architecture
-        # model.to_patch_embedding
-        # model.dropout
-        # model.transformer
-            # model.transformer.norm (cannot be frozen)
-            # model.transformer.layers -> len = 4
-                # model.transformer.layers[i].Attention
-                # model.transformer.layers[i].FeedForward
-        # model.to_latent
-        # model.mlp_head
-
-        if wandb.config.n_frozen_layers >= 1:
-            for i, param in enumerate(model.to_patch_embedding.parameters()):  
+        if config.n_frozen_layers >= 1:
+            for i, param in enumerate(model.to_patch_embedding.parameters()):
                 param.requires_grad = False
-            for i, param in enumerate(model.dropout.parameters()):  
+            for i, param in enumerate(model.dropout.parameters()):
                 param.requires_grad = False
 
-        if wandb.config.n_frozen_layers >= 2:
-            for layer_idx in range(min((wandb.config.n_frozen_layers - 1), 4)):
+        if config.n_frozen_layers >= 2:
+            for layer_idx in range(min((config.n_frozen_layers - 1), 4)):
                 for i, param in enumerate(model.transformer.layers[layer_idx].parameters()):
                     param.requires_grad = False
 
@@ -155,26 +159,26 @@ def main():
         optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
         model, history = train_model(model=model,
-                                    optimizer=optimizer,
-                                    criterion=criterion,
-                                    train_dataloader=train_dataloader,
-                                    test_dataloader=val_dataloader,
-                                    device=device,
-                                    epochs=wandb.config.epochs,
-                                    wandb_logging=True)
+                                     optimizer=optimizer,
+                                     criterion=criterion,
+                                     train_dataloader=train_dataloader,
+                                     test_dataloader=val_dataloader,
+                                     device=device,
+                                     epochs=config.epochs,
+                                     logger=wandb.run)
 
         fold_results['test_accs'].append(history['test_accs'])
         fold_results['test_f1s'].append(history['test_f1s'])
         fold_results['test_mse'].append(history['test_mse'])
         fold_results['train_loss'].append(history['train_loss'])
 
-
     all_fold_test_accs = np.array(fold_results['test_accs']).mean(axis=0)
     all_fold_test_f1s = np.array(fold_results['test_f1s']).mean(axis=0)
     all_fold_test_mses = np.array(fold_results['test_mse']).mean(axis=0)
     all_fold_train_losses = np.array(fold_results['train_loss']).mean(axis=0)
 
-    for acc, f1, mse, train_loss in zip(all_fold_test_accs, all_fold_test_f1s, all_fold_test_mses, all_fold_train_losses):
+    for acc, f1, mse, train_loss in zip(all_fold_test_accs, all_fold_test_f1s, all_fold_test_mses,
+                                        all_fold_train_losses):
         wandb.log({
             'all_fold_test_acc': acc,
             'all_folds_test_f1': f1,
@@ -182,17 +186,39 @@ def main():
             'all_folds_train_loss': train_loss,
         })
 
-
     best_acc_idx = np.argmax(all_fold_test_accs)
     wandb.run.summary["best_accuracy"] = all_fold_test_accs[best_acc_idx]
     wandb.run.summary["best_f1"] = all_fold_test_f1s[best_acc_idx]
     wandb.run.summary["best_mse"] = all_fold_test_mses[best_acc_idx]
 
 
-if __name__ == '__main__':
+def maybe_download_drive_folder():
+    destination_folder = "datasets/OnlineData"
+    if os.path.exists(destination_folder):
+        print("Folder already exists")
+        return
 
+    if not os.path.exists(destination_folder):
+        os.makedirs(destination_folder)
+
+    file_ids = [
+        "1Sitb0ooo2izvkHQGNQkXTGoDV4CJAnFF",
+        "1bIYLJVu-SqHzRnTFxuc1vkzRBs8Ll5Oi",
+        "1D7h11vheJ7Oq8Ju4ik8jqBJUocEie-rQ",
+        "1EWJdHHZ22xorZEpss-gf5R4cxehEs9pt",
+    ]
+
+    for file_id in file_ids:
+        download_path = os.path.join(destination_folder, file_id + ".pkl")
+        cmd = f"gdown https://drive.google.com/uc?id={file_id} -O {download_path}"
+        subprocess.call(cmd, shell=True)
+
+
+if __name__ == '__main__':
     random_seed = 100
     torch.manual_seed(random_seed)
+
+    maybe_download_drive_folder()
 
     sweep_configuration = {
         'method': 'bayes',
@@ -209,5 +235,8 @@ if __name__ == '__main__':
         },
     }
 
-    sweep_id = wandb.sweep(sweep=sweep_configuration, project="adaptive-hci-offline-adaptation")
-    wandb.agent(sweep_id, function=main, count=10)
+    if sys.gettrace() is not None:
+        main(base_configuration)
+    else:
+        sweep_id = wandb.sweep(sweep=sweep_configuration, project="adaptive-hci-offline-adaptation")
+        wandb.agent(sweep_id, function=main, count=10)
