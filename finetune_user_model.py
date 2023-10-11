@@ -8,7 +8,6 @@
 
 import os
 import pathlib
-import pickle
 import subprocess
 import sys
 
@@ -16,13 +15,14 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from sklearn.metrics import accuracy_score
 from torch.utils.data import DataLoader
 
 import configs
 from adaptive_hci import utils
 import wandb
-from adaptive_hci.datasets import EMGWindowsAdaptattionDataset
+from adaptive_hci.datasets import EMGWindowsAdaptationDataset, \
+                                  get_concatenated_user_episodes, \
+                                  load_online_episodes
 from adaptive_hci.training import train_model
 
 base_configuration = {
@@ -36,55 +36,6 @@ base_configuration = {
 }
 
 
-def predictions_to_onehot(predictions):
-    predicted_labels = np.zeros_like(predictions)
-    predicted_labels[predictions > 0.5] = 1
-    return predicted_labels
-
-
-class RLAccuracy:
-    def __init__(self, optimal_actions):
-        self.optimal_actions = optimal_actions
-
-    def __call__(self, algo, dataset):
-        predictions = algo.predict(dataset.observations)
-        onehot = predictions_to_onehot(predictions)
-        return accuracy_score(self.optimal_actions, onehot)
-
-
-def get_terminals(episodes, rewards):
-    terminals = np.zeros(rewards.shape[0])
-    last_terminal_idx = 0
-    for e in episodes:
-        term_idx = e['rewards'].shape[0] - 1 + last_terminal_idx
-        terminals[term_idx] = 1
-        last_terminal_idx = term_idx
-    return terminals
-
-
-def get_concatenated_arrays(episodes):
-    actions = np.concatenate([predictions_to_onehot(e['actions'].detach().numpy()) \
-                              for e in episodes]).squeeze()
-    optimal_actions = np.concatenate([e['optimal_actions'].detach().numpy() for e in episodes])
-    observations = np.concatenate([e['user_signals'] for e in episodes]).squeeze()
-    rewards = np.concatenate([e['rewards'] for e in episodes]).squeeze()
-
-    terminals = get_terminals(episodes, rewards)
-
-    return observations, actions, optimal_actions, rewards, terminals
-
-
-def load_fold_list(base_dir, filenames):
-    fold_list = []
-    for filename in filenames:
-        filepath = base_dir / filename
-        with open(filepath, 'rb') as f:
-            episodes = pickle.load(f)
-            fold_list.append(episodes)
-
-    return fold_list
-
-
 def main(base_model, user_hash, config: configs.BaseConfig):
     device = utils.get_device()
     run = wandb.init(tags=["offline_adaptation", user_hash], config=config, name=f"finetune_{config}_{user_hash[:15]}")
@@ -96,7 +47,7 @@ def main(base_model, user_hash, config: configs.BaseConfig):
     artifact.add_dir(online_data_dir, name='offline_adaptattion_data')
     run.log_artifact(artifact)
 
-    fold_list = load_fold_list(online_data_dir, episode_filenames)
+    fold_list = load_online_episodes(online_data_dir, episode_filenames)
 
     # TODO: this should be a parameter of the smoke config, this check is an hack
     # The config should have a parameter like num_folds, which can be None for all or 1,2,3, etc
@@ -127,16 +78,16 @@ def main(base_model, user_hash, config: configs.BaseConfig):
          train_actions,
          train_optimal_actions,
          train_rewards,
-         train_terminals) = get_concatenated_arrays(episodes=train_episodes)
+         train_terminals) = get_concatenated_user_episodes(episodes=train_episodes)
 
         (val_observations,
          val_actions,
          val_optimal_actions,
          val_rewards,
-         val_terminals) = get_concatenated_arrays(episodes=val_episodes)
+         val_terminals) = get_concatenated_user_episodes(episodes=val_episodes)
 
-        train_offline_adaption_dataset = EMGWindowsAdaptattionDataset(train_observations, train_optimal_actions)
-        val_offline_adaption_dataset = EMGWindowsAdaptattionDataset(val_observations, val_optimal_actions)
+        train_offline_adaption_dataset = EMGWindowsAdaptationDataset(train_observations, train_optimal_actions)
+        val_offline_adaption_dataset = EMGWindowsAdaptationDataset(val_observations, val_optimal_actions)
 
         train_dataloader = DataLoader(train_offline_adaption_dataset, batch_size=config.batch_size, shuffle=True)
         val_dataloader = DataLoader(val_offline_adaption_dataset, batch_size=config.batch_size, shuffle=True)

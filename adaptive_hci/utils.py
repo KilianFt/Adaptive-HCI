@@ -15,6 +15,12 @@ def labels_to_onehot(label):
     return onehot
 
 
+def predictions_to_onehot(predictions):
+    predicted_labels = np.zeros_like(predictions)
+    predicted_labels[predictions > 0.5] = 1
+    return predicted_labels
+
+
 def onehot_to_dof(onehot_vector):
     onehot_vector = np.array(onehot_vector, dtype=float)
     label_to_dof = np.array([

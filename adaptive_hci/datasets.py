@@ -1,5 +1,6 @@
 import os
 import time
+import pickle
 
 import numpy as np
 from scipy.io import loadmat
@@ -7,7 +8,7 @@ import torch
 from torch.utils import data
 
 from common import DataSourceEnum
-from .utils import labels_to_onehot
+from .utils import labels_to_onehot, predictions_to_onehot
 
 gesture_names = [
     "rest",
@@ -24,6 +25,38 @@ gesture_names = [
     "thumb flexion",
     "thumb extension",
 ]
+
+def load_online_episodes(base_dir, filenames):
+    online_episodes_list = []
+    for filename in filenames:
+        filepath = base_dir / filename
+        with open(filepath, 'rb') as f:
+            episodes = pickle.load(f)
+            online_episodes_list.append(episodes)
+
+    return online_episodes_list
+
+
+def get_terminals(episodes, rewards):
+    terminals = np.zeros(rewards.shape[0])
+    last_terminal_idx = 0
+    for e in episodes:
+        term_idx = e['rewards'].shape[0] - 1 + last_terminal_idx
+        terminals[term_idx] = 1
+        last_terminal_idx = term_idx
+    return terminals
+
+
+def get_concatenated_user_episodes(episodes):
+    actions = np.concatenate([predictions_to_onehot(e['actions'].detach().numpy()) \
+                              for e in episodes]).squeeze()
+    optimal_actions = np.concatenate([e['optimal_actions'].detach().numpy() for e in episodes])
+    observations = np.concatenate([e['user_signals'] for e in episodes]).squeeze()
+    rewards = np.concatenate([e['rewards'] for e in episodes]).squeeze()
+
+    terminals = get_terminals(episodes, rewards)
+
+    return observations, actions, optimal_actions, rewards, terminals
 
 
 def get_raw_mad_dataset(eval_path, window_length, overlap):
@@ -333,7 +366,7 @@ class CombinedDataset(data.Dataset):
         return self.dataset1.labels.shape[1]
 
 
-class EMGWindowsAdaptattionDataset(data.Dataset):
+class EMGWindowsAdaptationDataset(data.Dataset):
     def __init__(self, windows, labels):
         self.windows = torch.tensor(windows, dtype=torch.float32)
         self.labels = torch.tensor(labels, dtype=torch.float32)

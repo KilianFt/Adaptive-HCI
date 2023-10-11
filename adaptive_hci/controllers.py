@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 
 from train_general_model import main
 from training import train_model
-from datasets import EMGWindowsAdaptattionDataset
+from datasets import EMGWindowsAdaptationDataset
 class BaseController:
     @abc.abstractmethod
     def deterministic_forward(self, x) -> torch.Tensor:
@@ -80,7 +80,7 @@ class SLOnlyController(BaseController):
         return outputs
 
     def sl_update(self, states, optimal_actions):
-        train_dataset = EMGWindowsAdaptattionDataset(windows=states, labels=optimal_actions)
+        train_dataset = EMGWindowsAdaptationDataset(windows=states, labels=optimal_actions)
 
         train_dataloader = DataLoader(train_dataset,
                                       batch_size=self.batch_size,
