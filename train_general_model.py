@@ -1,18 +1,14 @@
-import datetime
-
-import numpy as np
 import torch
 import torch.nn as nn
-import torch.optim as optim
 from torch.utils.data import DataLoader, random_split
-from vit_pytorch import ViT
+import lightning.pytorch as pl
+from lightning.pytorch.loggers import WandbLogger
 
 import configs
 from adaptive_hci import utils
 from adaptive_hci.datasets import CombinedDataset, EMGWindowsDataset
-from adaptive_hci.training import train_model
+from adaptive_hci.controllers import EMGViT, PLModel
 from common import DataSourceEnum
-from deployment.buddy import buddy_setup
 
 
 def get_dataset_(config: configs.BaseConfig):
@@ -21,9 +17,9 @@ def get_dataset_(config: configs.BaseConfig):
     train_dataset, test_dataset = random_split(dataset, [
         1 - config.train_fraction, config.train_fraction])
 
-    dataloader_args = dict(batch_size=config.batch_size, shuffle=True, drop_last=False)
+    dataloader_args = dict(batch_size=config.batch_size, drop_last=False, num_workers=8)
 
-    train_dataloader = DataLoader(train_dataset, **dataloader_args)
+    train_dataloader = DataLoader(train_dataset, shuffle=True, **dataloader_args)
     test_dataloader = DataLoader(test_dataset, **dataloader_args)
     return train_dataloader, test_dataloader, dataset.num_unique_labels
 
@@ -62,12 +58,12 @@ def get_dataset(config: configs.BaseConfig):
 
 
 def main(logger, experiment_config: configs.BaseConfig) -> nn.Module:
-    device = utils.get_device()
-    print('Using device:', device)
+    # TODO can we just ignore other logger?
+    pl_logger = WandbLogger()
 
-    train_dataloader, test_dataloader, n_labels = get_dataset_(experiment_config)
+    train_dataloader, val_dataloader, n_labels = get_dataset_(experiment_config)
 
-    model = ViT(
+    vit = EMGViT(
         image_size=experiment_config.window_size,
         patch_size=experiment_config.patch_size,
         num_classes=n_labels,
@@ -78,35 +74,27 @@ def main(logger, experiment_config: configs.BaseConfig) -> nn.Module:
         dropout=experiment_config.dropout,
         emb_dropout=experiment_config.emb_dropout,
         channels=experiment_config.channels,
-    ).to(device=device)
-
-    assert experiment_config.loss in ["MSELoss"], "Only MSELoss is supported for now"
-    criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=experiment_config.lr)
-
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    model_name = f"pretrained_{timestamp}"  # TODO: replace with wandb.run.name
-
-    model, history = train_model(
-        model=model,
-        optimizer=optimizer,
-        criterion=criterion,
-        train_dataloader=train_dataloader,
-        test_dataloader=test_dataloader,
-        device=device,
-        model_name=model_name,
-        epochs=experiment_config.epochs,
-        logger=logger,
-        save_checkpoints=experiment_config.save_checkpoints,
     )
 
-    print('Best model epoch', np.argmax(history['test_accs']))
+    assert experiment_config.loss in ["MSELoss"], "Only MSELoss is supported for now"
 
-    if experiment_config.save_checkpoints:
-        model_save_path = f"models/{model_name}.pt"
-        print('Saved model at', model_save_path)
-        torch.save(model.cpu(), model_save_path)
-    return model
+    pl_model = PLModel(vit, n_labels=n_labels)
+
+    trainer = pl.Trainer(limit_train_batches=100,
+                         max_epochs=1,
+                         log_every_n_steps=1,
+                         logger=pl_logger,
+                         )
+    trainer.fit(model=pl_model,
+                train_dataloaders=train_dataloader,
+                val_dataloaders=val_dataloader)
+
+    # if experiment_config.save_checkpoints:
+    #     model_save_path = f"models/{model_name}.pt"
+    #     print('Saved model at', model_save_path)
+    #     torch.save(model.cpu(), model_save_path)
+
+    return pl_model
 
 
 if __name__ == '__main__':

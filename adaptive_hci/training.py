@@ -6,7 +6,7 @@ import tqdm
 import wandb.sdk.wandb_run
 from sklearn import metrics
 
-
+# TODO delete this
 def train_model(
         model,
         optimizer,
@@ -35,10 +35,6 @@ def train_model(
             train_inputs = train_inputs.to(device)
             train_labels = train_labels.to(device)
 
-            # TODO We should have a wrapper e.g. EMGVit that does the unsqueeze
-            if model.__class__.__name__ == 'ViT':
-                train_inputs.unsqueeze_(axis=1)
-
             optimizer.zero_grad()
 
             outputs = model(train_inputs)
@@ -59,9 +55,7 @@ def train_model(
                 test_inputs, test_labels = data
                 test_inputs = test_inputs.to(device)
                 test_labels = test_labels.to(device)
-                # TODO: We should have a wrapper e.g. EMGVit that does the unsqueeze
-                if model.__class__.__name__ == 'ViT':
-                    test_inputs.unsqueeze_(axis=1)
+
                 model.eval()
                 with torch.no_grad():
                     outputs = model(test_inputs)

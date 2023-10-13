@@ -1,12 +1,16 @@
 import abc
 import numpy as np
 import torch
+from torch.functional import F
 from stable_baselines3 import PPO
 from torch.utils.data import DataLoader
+from torchmetrics import ExactMatch, F1Score
+from vit_pytorch import ViT
+import lightning.pytorch as pl
 
-from train_general_model import main
-from training import train_model
-from datasets import EMGWindowsAdaptationDataset
+# from train_general_model import main
+from .training import train_model
+from .datasets import EMGWindowsAdaptationDataset
 class BaseController:
     @abc.abstractmethod
     def deterministic_forward(self, x) -> torch.Tensor:
@@ -55,7 +59,8 @@ class SLOnlyController(BaseController):
         if model_path is not None:
             self.policy = torch.load(model_path).to(self.device)
         else:
-            self.policy = main()
+            raise NotImplementedError('policy cannot be trained in controller')
+            # self.policy = main()
 
         if n_frozen_layers >= 1:
             for i, param in enumerate(self.policy.to_patch_embedding.parameters()):
@@ -87,6 +92,7 @@ class SLOnlyController(BaseController):
                                       shuffle=True,)
 
         # train model
+        # TODO change to lightning
         self.policy, history = train_model(self.policy,
                                     optimizer=self.optimizer,
                                     criterion=self.criterion,
@@ -96,3 +102,49 @@ class SLOnlyController(BaseController):
                                     epochs=self.epochs,)
 
         return history['train_loss'][-1]
+
+
+class EMGViT(ViT):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def __call__(self, x: torch.Tensor):
+        x.unsqueeze_(axis=1)
+        return self.forward(x)
+
+# TODO combine with controller above
+class PLModel(pl.LightningModule):
+    def __init__(self, model, n_labels, lr=1e-3):
+        super(PLModel, self).__init__()
+        self.save_hyperparameters(ignore=['model'])
+        self.model = model
+        self.lr = lr
+        self.criterion = torch.nn.MSELoss()
+        self.exact_match = ExactMatch(task="multilabel", num_labels=n_labels, threshold=0.5)
+        self.f1_score = F1Score(task="multilabel", num_labels=n_labels, threshold=0.5)
+
+    def forward(self, x):
+        return self.model(x)
+
+    def training_step(self, batch, batch_idx):
+        data, targets = batch
+        outputs = self.model(data)
+        loss = self.criterion(outputs, targets)
+        self.log("train_loss", loss)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        data, targets = batch
+        outputs = self.model(data)
+
+        val_acc = self.exact_match(outputs, targets)
+        val_f1 = self.f1_score(outputs, targets)
+        val_loss = F.mse_loss(outputs, targets)
+        self.log('val_loss', val_loss, prog_bar=True)
+        self.log('val_acc', val_acc, prog_bar=True)
+        self.log('val_f1', val_f1, prog_bar=True)
+
+        return val_loss
+
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.parameters(), lr=self.lr)
