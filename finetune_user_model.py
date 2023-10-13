@@ -35,7 +35,7 @@ def main(base_pl_model, user_hash, config: configs.BaseConfig):
                          name=f"finetune_{config}_{user_hash[:15]}")
 
     online_data_dir = pathlib.Path('datasets/OnlineData')
-    episode_filenames = os.listdir(online_data_dir)
+    episode_filenames = sorted(os.listdir(online_data_dir))
 
     artifact = wandb.Artifact(name="offline_adaptattion_data", type="dataset")
     artifact.add_dir(online_data_dir, name='offline_adaptattion_data')
