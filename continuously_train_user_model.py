@@ -1,43 +1,39 @@
 import os
+import sys
+import copy
 import pathlib
 
 import wandb
 import torch
 import numpy as np
-from d3rlpy.datasets import MDPDataset
+from torch.utils.data import DataLoader
+import lightning.pytorch as pl
+from lightning.pytorch.loggers import WandbLogger
+from lightning.pytorch import LightningModule
 
-from adaptive_hci import utils
-from adaptive_hci.controllers import SLOnlyController
-from adaptive_hci.datasets import get_concatenated_user_episodes, load_online_episodes
-from adaptive_hci.metrics import get_episode_accuracy
+import configs
+from adaptive_hci.datasets import EMGWindowsAdaptationDataset, \
+                                  get_concatenated_user_episodes, \
+                                  load_online_episodes
 
+def main(finetuned_model: LightningModule, user_hash, config: configs.BaseConfig) -> LightningModule:
 
-def simulate_online_adaptation():
-    _ = wandb.init(
-       tags=["test_online_adaptation"],
-    )
+    logger = WandbLogger(project='adaptive_hci',
+                         tags=["online_adaptation", user_hash],
+                         config=config,
+                         name=f"online_adapt_{config}_{user_hash[:15]}")
 
-    device = utils.get_device()
+    # TODO smoke config
 
-    # batch_size = 32
-    # lr = 1e-3
-    # epochs = 1
-    # n_frozen_layers = 2
-    # train_intervals = 1
-    # first_training_episode = 0
-
-    model_path = pathlib.Path('models/pretrained_2023-09-20_22-18-02.pt')
-    controller = SLOnlyController(model_path=model_path,
-                                  device=device,
-                                  lr=wandb.config.lr,
-                                  batch_size=wandb.config.batch_size,
-                                  epochs=wandb.config.epochs,
-                                  n_frozen_layers=wandb.config.n_frozen_layers)
+    pl_model = copy.deepcopy(finetuned_model)
+    pl_model.freeze_layers(config.online_n_frozen_layers)
+    pl_model.lr = config.online_lr
 
     online_data_dir = pathlib.Path('datasets/AdaptationTest')
     episode_filenames = sorted(os.listdir(online_data_dir))    
     online_data = load_online_episodes(online_data_dir, episode_filenames)
 
+    # TODO include other online data?
     current_trial_episodes = online_data[0]
 
     (observations,
@@ -46,33 +42,72 @@ def simulate_online_adaptation():
      rewards,
      terminals) = get_concatenated_user_episodes(episodes=current_trial_episodes)
 
-    rl_dataset = MDPDataset(observations=observations,
-                            actions=optimal_actions,
-                            rewards=rewards,
-                            terminals=terminals)
+    terminal_idxs = torch.argwhere(torch.tensor(terminals)).squeeze()
+    observations = torch.tensor(observations)
+    optimal_actions = torch.tensor(optimal_actions)
+
+    # FIXME
+    is_smoke = isinstance(config, configs.SmokeConfig)
+    if is_smoke:
+        terminal_idxs = terminal_idxs[:1]
 
     # simulate online data replay
     results = []
-    for ep_idx, episode in enumerate(rl_dataset.episodes):
-        ep_acc, ep_f1 = get_episode_accuracy(controller.policy, episode.observations, episode.actions)
+    for ep_idx, terminal_idx in enumerate(terminal_idxs):
+        # Can we avoid reloading the dataloader? problem is that max_epochs only works with calling fit once
+        trainer = pl.Trainer(limit_train_batches=100,
+                    max_epochs=config.online_epochs,
+                    log_every_n_steps=1,
+                    logger=logger,
+                    )
+            
+        # validation
+        val_last_terminal_idx = terminal_idxs[(ep_idx - 1)]
+        ep_val_observations = observations[val_last_terminal_idx:terminal_idx]
+        ep_val_optimal_actions = optimal_actions[val_last_terminal_idx:terminal_idx]
 
-        if ep_idx >= wandb.config.first_training_episode and ep_idx % wandb.config.train_intervals == 0:
-            _ = controller.sl_update(episode.observations,
-                                episode.actions)
-
-        results.append({
-            'accuracy': ep_acc,
-            'f1': ep_f1,
-        })
-
-    wandb.log({
-        'accuracy': np.mean([r['accuracy'] for r in results]),
-        'f1': np.mean([r['f1'] for r in results]),
-    })
+        val_dataset = EMGWindowsAdaptationDataset(ep_val_observations,
+                                                  ep_val_optimal_actions)
+        val_dataloader = DataLoader(val_dataset,
+                                    batch_size=config.online_batch_size,
+                                    num_workers=8)
     
-def main():
+        hist = trainer.validate(model=pl_model,
+                                dataloaders=val_dataloader)
+        
+        results.append(hist[0])
+
+        if ep_idx >= config.online_first_training_episode and ep_idx % config.online_train_intervals == 0:
+            # training
+            # FIXME change way of loading training data, maybe random epochs
+            last_batches_to_train = config.online_train_intervals
+            last_terminal_idx = terminal_idxs[(ep_idx - last_batches_to_train)]
+
+            ep_observations = observations[last_terminal_idx:terminal_idx]
+            ep_optimal_actions = optimal_actions[last_terminal_idx:terminal_idx]
+
+            train_dataset = EMGWindowsAdaptationDataset(ep_observations,
+                                                        ep_optimal_actions)
+            train_dataloader = DataLoader(train_dataset,
+                                        batch_size=config.online_batch_size,
+                                        num_workers=8)
+
+            trainer.fit(model=pl_model,
+                train_dataloaders=train_dataloader)
+
+    wandb.run.log({
+        'mean_accuracy': np.mean([r['val_acc'] for r in results]),
+        'mean_f1': np.mean([r['val_f1'] for r in results]),
+    })
+
+    return pl_model
+    
+
+if __name__ == '__main__':
     random_seed = 100
     torch.manual_seed(random_seed)
+
+    # TODO download data if not present
 
     sweep_configuration = {
         'method': 'bayes',
@@ -89,9 +124,19 @@ def main():
         },
     }
 
-    sweep_id = wandb.sweep(sweep=sweep_configuration, project="adaptive-hci-online-test")
+    base_configuration = {
+        'batch_size': 16,
+        'epochs': 9,
+        'lr': 3.5e-3,
+        'n_frozen_layers': 2,
+        'train_intervals': 4,
+        'first_training_episode': 0,
+    }
 
-    wandb.agent(sweep_id, function=simulate_online_adaptation, count=100)
-
-if __name__ == '__main__':
-    main()
+    if sys.gettrace() is not None:
+        main(base_configuration)
+    else:
+        # model_path = pathlib.Path('models/pretrained_2023-09-20_22-18-02.pt')
+        # TODO load model and pass to main
+        sweep_id = wandb.sweep(sweep=sweep_configuration, project="adaptive-hci-online-test")
+        wandb.agent(sweep_id, function=main, count=100)

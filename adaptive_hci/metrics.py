@@ -17,6 +17,7 @@ def plot_and_mean(rl_reward_history, title):
     plt.show()
 
 
+# TODO can probably delete
 def get_episode_accuracy(model, observations, optimal_actions):
     model.eval()
     observations = torch.tensor(observations, dtype=torch.float32)

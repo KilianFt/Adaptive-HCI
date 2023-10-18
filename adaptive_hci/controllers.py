@@ -1,6 +1,7 @@
 import abc
 import numpy as np
 import torch
+from torch import Tensor
 from torch.functional import F
 from stable_baselines3 import PPO
 from torch.utils.data import DataLoader
@@ -114,7 +115,7 @@ class EMGViT(ViT):
 
 # TODO combine with controller above
 class PLModel(pl.LightningModule):
-    def __init__(self, model, n_labels, lr=1e-3):
+    def __init__(self, model, n_labels, lr=1e-3, n_frozen_layers=None):
         super(PLModel, self).__init__()
         self.save_hyperparameters(ignore=['model'])
         self.model = model
@@ -123,7 +124,22 @@ class PLModel(pl.LightningModule):
         self.exact_match = ExactMatch(task="multilabel", num_labels=n_labels, threshold=0.5)
         self.f1_score = F1Score(task="multilabel", num_labels=n_labels, threshold=0.5)
 
-    def forward(self, x):
+        if n_frozen_layers is not None:
+            self.freeze_layers(n_frozen_layers)
+
+    def freeze_layers(self, n_frozen_layers: int) -> None:
+        if n_frozen_layers >= 1:
+            for param in self.model.to_patch_embedding.parameters():
+                param.requires_grad = False
+            for param in self.model.dropout.parameters():
+                param.requires_grad = False
+
+        if n_frozen_layers >= 2:
+            for layer_idx in range(min((n_frozen_layers - 1), 4)):
+                for param in self.model.transformer.layers[layer_idx].parameters():
+                    param.requires_grad = False
+
+    def forward(self, x: Tensor) -> Tensor:
         return self.model(x)
 
     def training_step(self, batch, batch_idx):
@@ -144,7 +160,7 @@ class PLModel(pl.LightningModule):
         self.log('val_acc', val_acc, prog_bar=True)
         self.log('val_f1', val_f1, prog_bar=True)
 
-        return val_loss
+        return val_loss, val_acc, val_f1
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.lr)

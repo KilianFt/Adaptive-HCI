@@ -27,6 +27,12 @@ class BaseConfig:
     n_frozen_layers: int = 2
     random_seed: int = 100
     save_checkpoints: bool = False
+    online_batch_size: int =  16
+    online_epochs: int =  9
+    online_lr: float =  3.5e-3
+    online_n_frozen_layers: int =  2
+    online_train_intervals: int =  4
+    online_first_training_episode: int =  0
     hostname: str = ""
     # hostname: str = "mila"
     # hostname: str = "cc-cedar"
