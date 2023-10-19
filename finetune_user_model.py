@@ -88,7 +88,7 @@ def main(base_pl_model, user_hash, config: configs.BaseConfig):
 
 
 def maybe_download_drive_folder():
-    destination_folder = "datasets/OnlineData"
+    destination_folder = "datasets/OnlineData/"
     if os.path.exists(destination_folder):
         print("Folder already exists")
         return
@@ -104,8 +104,7 @@ def maybe_download_drive_folder():
     ]
 
     for file_id in file_ids:
-        download_path = os.path.join(destination_folder, file_id + ".pkl")
-        cmd = f"gdown https://drive.google.com/uc?id={file_id} -O {download_path}"
+        cmd = f"gdown https://drive.google.com/uc?id={file_id} -O {destination_folder}"
         subprocess.call(cmd, shell=True)
 
 
