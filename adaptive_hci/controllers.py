@@ -128,14 +128,20 @@ class PLModel(pl.LightningModule):
             self.freeze_layers(n_frozen_layers)
 
     def freeze_layers(self, n_frozen_layers: int) -> None:
+        # reset grad
+        for param in self.model.parameters():
+            param.requires_grad = True
+
+        # freeze desired ones
         if n_frozen_layers >= 1:
             for param in self.model.to_patch_embedding.parameters():
                 param.requires_grad = False
             for param in self.model.dropout.parameters():
                 param.requires_grad = False
 
+        # FIXME adjust for other models than ViT
         if n_frozen_layers >= 2:
-            for layer_idx in range(min((n_frozen_layers - 1), 4)):
+            for layer_idx in range(min((n_frozen_layers - 1), len(self.model.transformer.layers))):
                 for param in self.model.transformer.layers[layer_idx].parameters():
                     param.requires_grad = False
 

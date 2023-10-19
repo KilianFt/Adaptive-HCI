@@ -16,13 +16,10 @@ from adaptive_hci.datasets import EMGWindowsAdaptationDataset, \
                                   load_online_episodes
 
 base_configuration = {
-    'batch_size': 32,
-    'epochs': 50,
-    'lr': 0.005,
-    'n_frozen_layers': 2,
-    'window_size': 600,
-    'overlap': 100,
-    'model_class': 'ViT',
+    'finetune_batch_size': 32,
+    'finetune_epochs': 50,
+    'finetune_lr': 0.005,
+    'finetune_n_frozen_layers': 2,
 }
 
 
@@ -43,17 +40,14 @@ def main(base_pl_model, user_hash, config: configs.BaseConfig):
 
     episode_list = load_online_episodes(online_data_dir, episode_filenames)
 
-    # TODO: this should be a parameter of the smoke config, this check is an hack
-    # The config should have a parameter like num_folds, which can be None for all or 1,2,3, etc
-    is_smoke = isinstance(config, configs.SmokeConfig)
-    if is_smoke:
-        episode_list = episode_list[:2]
+    if config.finetune_num_episodes is not None:
+        episode_list = episode_list[:config.finetune_num_episodes]
 
     train_episodes = []
     for ep in episode_list[:-1]:
         train_episodes += ep
 
-    if is_smoke:
+    if config.finetune_num_episodes is not None:
         train_episodes = train_episodes[:1]
 
     val_episodes = episode_list[-1]
@@ -73,24 +67,16 @@ def main(base_pl_model, user_hash, config: configs.BaseConfig):
     train_offline_adaption_dataset = EMGWindowsAdaptationDataset(train_observations, train_optimal_actions)
     val_offline_adaption_dataset = EMGWindowsAdaptationDataset(val_observations, val_optimal_actions)
 
-    dataloader_args = dict(batch_size=config.batch_size, num_workers=8)
+    dataloader_args = dict(batch_size=config.finetune_batch_size, num_workers=8)
 
     train_dataloader = DataLoader(train_offline_adaption_dataset, shuffle=True, **dataloader_args)
     val_dataloader = DataLoader(val_offline_adaption_dataset, **dataloader_args)
-    
-    if config.n_frozen_layers >= 1:
-        for param in pl_model.model.to_patch_embedding.parameters():
-            param.requires_grad = False
-        for param in pl_model.model.dropout.parameters():
-            param.requires_grad = False
 
-    if config.n_frozen_layers >= 2:
-        for layer_idx in range(min((config.n_frozen_layers - 1), 4)):
-            for param in pl_model.model.transformer.layers[layer_idx].parameters():
-                param.requires_grad = False
+    pl_model.lr = config.finetune_lr
+    pl_model.freeze_layers(config.finetune_n_frozen_layers)
 
     trainer = pl.Trainer(limit_train_batches=100,
-                        max_epochs=1,
+                        max_epochs=config.finetune_epochs,
                         log_every_n_steps=1,
                         logger=logger,
                         )
@@ -134,13 +120,10 @@ if __name__ == '__main__':
         'name': 'sweep',
         'metric': {'goal': 'maximize', 'name': 'test_acc'},
         'parameters': {
-            'batch_size': {'values': [16, 32, 64]},
-            'epochs': {'value': 50},
-            'lr': {'max': 0.005, 'min': 0.0001},
-            'n_frozen_layers': {'max': 5, 'min': 0},
-            'window_size': {'value': 600},
-            'overlap': {'values': [50, 100, 150]},
-            'model_class': {'value': 'ViT'},
+            'finetune_batch_size': {'values': [16, 32, 64]},
+            'finetune_epochs': {'value': 50},
+            'finetune_lr': {'max': 0.005, 'min': 0.0001},
+            'finetune_n_frozen_layers': {'max': 5, 'min': 0},
         },
     }
 

@@ -10,4 +10,5 @@ wandb
 experiment_buddy
 scipy
 scikit-learn
+d3rlpy
 pyopenssl # Mila cluster
