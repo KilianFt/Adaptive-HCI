@@ -16,9 +16,9 @@ def main():
     experiment_config = configs.SmokeConfig()
     logger, experiment_config = buddy_setup(experiment_config, entity='kilian')
 
-    general_pl_model = train_general_model.main(logger, experiment_config)
+    general_model = train_general_model.main(logger, experiment_config)
     for user_hash in train_users:
-        finetuned_user_model = finetune_user_model.main(general_pl_model, user_hash, experiment_config)
+        finetuned_user_model = finetune_user_model.main(general_model, user_hash, experiment_config)
         user_model = continuously_train_user_model.main(finetuned_user_model, user_hash, experiment_config)
 
 
