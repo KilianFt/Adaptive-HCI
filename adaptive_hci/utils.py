@@ -66,11 +66,8 @@ def disk_cache(func):
         cache_dir = f'cache/{func.__name__}'
         os.makedirs(cache_dir, exist_ok=True)
 
-        # Serialize arguments and compute hash
-        # arg_str = json.dumps([args, kwargs], sort_keys=True, cls=EnhancedJSONEncoder)
         arg_str = pickle.dumps([args, kwargs])
         arg_hash = hashlib.sha256(arg_str).hexdigest()
-
         cache_file_path = os.path.join(cache_dir, f'{arg_hash}.json')
 
         if os.path.exists(cache_file_path):
