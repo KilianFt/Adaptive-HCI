@@ -5,11 +5,14 @@ __pycache__/
 wandb/
 tmp/
 models/
+cache/
+lightning_logs/
 *.pkl
 *.pt
 *.png
 *.jpg
 *.pyc
 *.DS_STORE
+*.ckpt
 
-
+/runs/

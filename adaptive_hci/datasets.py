@@ -1,11 +1,14 @@
 import os
+import time
+import pickle
 
 import numpy as np
 from scipy.io import loadmat
 import torch
 from torch.utils import data
 
-from utils import labels_to_onehot
+from common import DataSourceEnum
+from .utils import labels_to_onehot, predictions_to_onehot
 
 gesture_names = [
     "rest",
@@ -23,19 +26,51 @@ gesture_names = [
     "thumb extension",
 ]
 
+def load_online_episodes(base_dir, filenames):
+    online_episodes_list = []
+    for filename in filenames:
+        filepath = base_dir / filename
+        with open(filepath, 'rb') as f:
+            episodes = pickle.load(f)
+            online_episodes_list.append(episodes)
+
+    return online_episodes_list
+
+
+def get_terminals(episodes, rewards):
+    terminals = np.zeros(rewards.shape[0])
+    last_terminal_idx = 0
+    for e in episodes:
+        term_idx = e['rewards'].shape[0] - 1 + last_terminal_idx
+        terminals[term_idx] = 1
+        last_terminal_idx = term_idx
+    return terminals
+
+
+def get_concatenated_user_episodes(episodes):
+    actions = np.concatenate([predictions_to_onehot(e['actions'].detach().numpy()) \
+                              for e in episodes]).squeeze()
+    optimal_actions = np.concatenate([e['optimal_actions'].detach().numpy() for e in episodes])
+    observations = np.concatenate([e['user_signals'] for e in episodes]).squeeze()
+    rewards = np.concatenate([e['rewards'] for e in episodes]).squeeze()
+
+    terminals = get_terminals(episodes, rewards)
+
+    return observations, actions, optimal_actions, rewards, terminals
+
 
 def get_raw_mad_dataset(eval_path, window_length, overlap):
     person_folders = os.listdir(eval_path)
 
     first_folder = os.listdir(eval_path)[0]
-    keys = next(os.walk((eval_path+first_folder)))[1]
+    keys = next(os.walk((eval_path + first_folder)))[1]
 
     number_of_classes = 7
     size_non_overlap = window_length - overlap
 
     raw_dataset_dict = {}
     for key in keys:
-            
+
         raw_dataset = {
             'examples': [],
             'labels': [],
@@ -46,8 +81,8 @@ def get_raw_mad_dataset(eval_path, window_length, overlap):
             labels = []
             data_path = eval_path + person_dir + '/' + key
             for data_file in os.listdir(data_path):
-                if (data_file.endswith(".dat")):
-                    data_read_from_file = np.fromfile((data_path+'/'+data_file), dtype=np.int16)
+                if data_file.endswith(".dat"):
+                    data_read_from_file = np.fromfile((data_path + '/' + data_file), dtype=np.int16)
                     data_read_from_file = np.array(data_read_from_file, dtype=np.float32)
 
                     dataset_example_formatted = []
@@ -80,22 +115,54 @@ def get_raw_mad_dataset(eval_path, window_length, overlap):
     return raw_dataset_dict
 
 
+def maybe_download_mad_dataset(mad_base_dir):
+    if os.path.exists(mad_base_dir):
+        return
+    print("MyoArmbandDataset not found")
+
+    if os.path.exists(mad_base_dir + '/.lock'):
+        print("Waiting for download to finish")
+        # wait for download to finish
+        while os.path.exists(mad_base_dir + '/.lock'):
+            print(".", end="")
+            time.sleep(1)
+        return
+
+    os.makedirs(mad_base_dir, exist_ok=True)
+
+    # create a lock file to prevent multiple downloads
+    os.system(f'touch {mad_base_dir}/.lock')
+
+    print("Downloading MyoArmbandDataset")
+    os.system(f'git clone https://github.com/UlysseCoteAllard/MyoArmbandDataset {mad_base_dir}')
+    print("Download finished")
+
+    # remove the lock file
+    os.system(f'rm {mad_base_dir}/.lock')
+
+
 def get_mad_windows_dataset(mad_base_dir, _, window_length, overlap):
+    maybe_download_mad_dataset(mad_base_dir)
+
     train_path = mad_base_dir + 'PreTrainingDataset/'
     eval_path = mad_base_dir + 'EvaluationDataset/'
 
     eval_raw_dataset_dict = get_raw_mad_dataset(eval_path, window_length, overlap)
     train_raw_dataset_dict = get_raw_mad_dataset(train_path, window_length, overlap)
 
-    mad_all_windows = eval_raw_dataset_dict['training0']['examples'] + \
-                        eval_raw_dataset_dict['Test0']['examples'] + \
-                        eval_raw_dataset_dict['Test1']['examples'] + \
-                        train_raw_dataset_dict['training0']['examples']
+    mad_all_windows = (
+            eval_raw_dataset_dict['training0']['examples'] +
+            eval_raw_dataset_dict['Test0']['examples'] +
+            eval_raw_dataset_dict['Test1']['examples'] +
+            train_raw_dataset_dict['training0']['examples']
+    )
 
-    mad_all_labels = eval_raw_dataset_dict['training0']['labels'] + \
-                        eval_raw_dataset_dict['Test0']['labels'] + \
-                        eval_raw_dataset_dict['Test1']['labels'] + \
-                        train_raw_dataset_dict['training0']['labels']
+    mad_all_labels = (
+            eval_raw_dataset_dict['training0']['labels'] +
+            eval_raw_dataset_dict['Test0']['labels'] +
+            eval_raw_dataset_dict['Test1']['labels'] +
+            train_raw_dataset_dict['training0']['labels']
+    )
 
     # filter by labels
     mad_windows = None
@@ -114,10 +181,11 @@ def get_mad_windows_dataset(mad_base_dir, _, window_length, overlap):
 
     mad_onehot_labels = np.array([labels_to_onehot(label) for label in mad_labels])
 
+    print("MAD dataset loaded")
     return mad_windows, mad_onehot_labels
 
 
-def create_ninapro_windows(X, y, stride, window_length, desired_labels = None):
+def create_ninapro_windows(X, y, stride, window_length, desired_labels=None):
     features_dataset = {key: [] for key in np.unique(y)}
     last_class_idx = None
     consequetive_features = []
@@ -169,11 +237,11 @@ def get_ninapro_windows_dataset(ninapro_base_dir, emg_range, window_length, over
                 ninapro_s_x = np.interp(ninapro_s_x_raw, emg_range, (-1, +1))
                 ninapro_s_y = ninapro_s1['restimulus'].squeeze()
 
-                subject_windows, subject_labels = create_ninapro_windows(X = ninapro_s_x,
-                                                                 y = ninapro_s_y,
-                                                                 stride = stride,
-                                                                 window_length = window_length,
-                                                                 desired_labels = [0,13,14,15,16],)
+                subject_windows, subject_labels = create_ninapro_windows(X=ninapro_s_x,
+                                                                         y=ninapro_s_y,
+                                                                         stride=stride,
+                                                                         window_length=window_length,
+                                                                         desired_labels=[0, 13, 14, 15, 16], )
 
                 if ninapro_windows is None:
                     ninapro_windows = subject_windows
@@ -182,15 +250,15 @@ def get_ninapro_windows_dataset(ninapro_base_dir, emg_range, window_length, over
                     ninapro_windows = np.concatenate((ninapro_windows, subject_windows))
                     ninapro_labels = np.concatenate((ninapro_labels, subject_labels))
 
-    ninapro_windows = ninapro_windows.swapaxes(1,2)
+    ninapro_windows = ninapro_windows.swapaxes(1, 2)
 
     # replace labels
     label_map = {0: 0,
-                13: 2,
-                14: 4,
-                15: 1,
-                16: 3,
-                }
+                 13: 2,
+                 14: 4,
+                 15: 1,
+                 16: 3,
+                 }
 
     ninapro_mapped_labels = np.vectorize(label_map.get)(ninapro_labels)
     ninapro_onehot_labels = np.array([labels_to_onehot(label) for label in ninapro_mapped_labels])
@@ -200,19 +268,31 @@ def get_ninapro_windows_dataset(ninapro_base_dir, emg_range, window_length, over
 
 class EMGWindowsDataset(data.Dataset):
     DATASET_DIRS = {
-        'ninapro5': ('datasets/ninapro/DB5/', get_ninapro_windows_dataset),
-        'mad': ('datasets/MyoArmbandDataset/', get_mad_windows_dataset),
+        DataSourceEnum.NINA_PRO: ('datasets/ninapro/DB5', get_ninapro_windows_dataset),
+        DataSourceEnum.MAD: ('datasets/MyoArmbandDataset/', get_mad_windows_dataset),
+        DataSourceEnum.MiniMAD: ('datasets/MyoArmbandDataset/', get_mad_windows_dataset),
     }
-    def __init__(self, dataset_name, window_size=200, overlap=0, emg_range=(-128,127)):
-        assert dataset_name in self.DATASET_DIRS, f'Dataset not found, please pick one of {list(self.DATASET_DIRS.keys())}'
+    # Mila server, it's a hack.
+    if os.path.exists("/home/mila/d/delvermm/scratch/"):
+        for key, value in DATASET_DIRS.items():
+            DATASET_DIRS[key] = (os.path.join("/home/mila/d/delvermm/scratch/", value[0]), value[1])
 
-        base_dir, load_dataset = self.DATASET_DIRS[dataset_name]
+    def __init__(
+            self,
+            data_source: DataSourceEnum,
+            split: str,
+            window_size=200,
+            overlap=0,
+            emg_range=(-128, 127),
+    ):
+        base_dir, load_dataset = self.DATASET_DIRS[data_source]
+        if data_source == DataSourceEnum.NINA_PRO:
+            base_dir += "_" + split
 
-        self.windows, self.labels = load_dataset(base_dir,
-                                                 emg_range,
-                                                 window_size,
-                                                 overlap)
-
+        self.windows, self.labels = load_dataset(base_dir, emg_range, window_size, overlap)
+        if data_source in (DataSourceEnum.MiniMAD,):
+            self.windows = self.windows[:10]
+            self.labels = self.labels[:10]
 
         self.windows = torch.tensor(self.windows, dtype=torch.float32)
         self.labels = torch.tensor(self.labels, dtype=torch.float32)
@@ -221,13 +301,14 @@ class EMGWindowsDataset(data.Dataset):
         return len(self.windows)
 
     def __getitem__(self, idx):
-        x_tensor = self.windows[idx,:,:]
+        x_tensor = self.windows[idx, :, :]
         y_tensor = self.labels[idx]
         return x_tensor, y_tensor
-    
+
     @property
     def num_unique_labels(self):
         return self.labels.shape[1]
+
 
 class NinaPro1(data.Dataset[data.TensorDataset]):
     def __init__(self):
@@ -269,22 +350,23 @@ class CombinedDataset(data.Dataset):
 
     def __getitem__(self, idx):
         if idx < len(self.dataset1):
-            x_tensor = self.dataset1.windows[idx,:,:] 
+            x_tensor = self.dataset1.windows[idx, :, :]
             y_tensor = self.dataset1.labels[idx]
-            return x_tensor, y_tensor 
+            return x_tensor, y_tensor
         else:
             # Adjust the idx for the second dataset
             idx -= len(self.dataset1)
-            x_tensor = self.dataset2.windows[idx,:,:] 
+            x_tensor = self.dataset2.windows[idx, :, :]
             y_tensor = self.dataset2.labels[idx]
-            return x_tensor, y_tensor 
+            return x_tensor, y_tensor
 
     @property
     def num_unique_labels(self):
         assert self.dataset1.labels.shape[1] == self.dataset2.labels.shape[1], 'labels of both datasets must match'
         return self.dataset1.labels.shape[1]
 
-class EMGWindowsAdaptattionDataset(data.Dataset):
+
+class EMGWindowsAdaptationDataset(data.Dataset):
     def __init__(self, windows, labels):
         self.windows = torch.tensor(windows, dtype=torch.float32)
         self.labels = torch.tensor(labels, dtype=torch.float32)
@@ -293,10 +375,10 @@ class EMGWindowsAdaptattionDataset(data.Dataset):
         return len(self.windows)
 
     def __getitem__(self, idx):
-        x_tensor = self.windows[idx,:,:]
+        x_tensor = self.windows[idx, :, :]
         y_tensor = self.labels[idx]
         return x_tensor, y_tensor
-    
+
     @property
     def num_unique_labels(self):
         return self.labels.shape[1]

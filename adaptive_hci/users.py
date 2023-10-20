@@ -34,8 +34,8 @@ class ClassificationUserPolicy(torch.nn.Module):
         signal = observation["desired_goal"] - observation["achieved_goal"]
         signal = signal.astype(np.float32)
 
-        # create onehot signal
         onehot_vector = np.zeros(5, dtype=np.float32)
+
         for i, single_signal in enumerate(signal):
             if np.abs(single_signal) > 0.005:
                 if single_signal > 0:
@@ -48,6 +48,7 @@ class ClassificationUserPolicy(torch.nn.Module):
                         onehot_vector[2] = 1.
                     elif i == 1:
                         onehot_vector[1] = 1.
+
         return onehot_vector
 
 
@@ -171,7 +172,7 @@ class EMGClassificationUser(BaseUser):
         self.emg_min = -128
         self.emg_max = 127
         window_size = 200
-        overlap = 150
+        overlap = 180
         n_channels = 8
 
         self.stride = window_size - overlap

@@ -1,6 +1,14 @@
 torch
+lightning
 gymnasium
 screeninfo
 stable_baselines3
 pyautogui
 gymnasium-robotics
+vit-pytorch
+wandb
+experiment_buddy
+scipy
+scikit-learn
+d3rlpy
+pyopenssl # Mila cluster
