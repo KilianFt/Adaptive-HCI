@@ -1,6 +1,5 @@
 import os
 import pathlib
-import subprocess
 import sys
 import copy
 
@@ -11,6 +10,7 @@ import lightning.pytorch as pl
 from lightning.pytorch.loggers import WandbLogger
 
 import configs
+from adaptive_hci.utils import maybe_download_drive_folder
 from adaptive_hci.datasets import EMGWindowsAdaptationDataset, \
                                   get_concatenated_user_episodes, \
                                   load_online_episodes
@@ -23,6 +23,13 @@ base_configuration = {
 }
 
 
+file_ids = [
+    "1Sitb0ooo2izvkHQGNQkXTGoDV4CJAnFF",
+    "1bIYLJVu-SqHzRnTFxuc1vkzRBs8Ll5Oi",
+    "1D7h11vheJ7Oq8Ju4ik8jqBJUocEie-rQ",
+    "1EWJdHHZ22xorZEpss-gf5R4cxehEs9pt",
+]
+
 def main(base_pl_model, user_hash, config: configs.BaseConfig):
     pl_model = copy.deepcopy(base_pl_model)
 
@@ -32,6 +39,8 @@ def main(base_pl_model, user_hash, config: configs.BaseConfig):
                          name=f"finetune_{config}_{user_hash[:15]}")
 
     online_data_dir = pathlib.Path('datasets/OnlineData')
+    maybe_download_drive_folder(online_data_dir, file_ids=file_ids)
+
     episode_filenames = sorted(os.listdir(online_data_dir))
 
     artifact = wandb.Artifact(name="offline_adaptattion_data", type="dataset")
@@ -87,32 +96,9 @@ def main(base_pl_model, user_hash, config: configs.BaseConfig):
     return pl_model
 
 
-def maybe_download_drive_folder():
-    destination_folder = "datasets/OnlineData/"
-    if os.path.exists(destination_folder):
-        print("Folder already exists")
-        return
-
-    if not os.path.exists(destination_folder):
-        os.makedirs(destination_folder)
-
-    file_ids = [
-        "1Sitb0ooo2izvkHQGNQkXTGoDV4CJAnFF",
-        "1bIYLJVu-SqHzRnTFxuc1vkzRBs8Ll5Oi",
-        "1D7h11vheJ7Oq8Ju4ik8jqBJUocEie-rQ",
-        "1EWJdHHZ22xorZEpss-gf5R4cxehEs9pt",
-    ]
-
-    for file_id in file_ids:
-        cmd = f"gdown https://drive.google.com/uc?id={file_id} -O {destination_folder}"
-        subprocess.call(cmd, shell=True)
-
-
 if __name__ == '__main__':
     random_seed = 100
     torch.manual_seed(random_seed)
-
-    maybe_download_drive_folder()
 
     sweep_configuration = {
         'method': 'bayes',

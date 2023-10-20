@@ -80,6 +80,7 @@ class SmokeConfig(BaseConfig):
     sweep_config: str = ""
     data_source: DataSourceEnum = DataSourceEnum.MiniMAD
     finetune_num_episodes: int = 2
+    finetune_epochs: int = 1
     online_num_episodes: int = 1
     online_epochs: int =  1
     online_train_intervals: int =  1

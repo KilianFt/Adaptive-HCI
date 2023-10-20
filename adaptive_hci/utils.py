@@ -4,6 +4,7 @@ import json
 import os
 import pickle
 from functools import wraps
+import subprocess
 
 import numpy as np
 import torch
@@ -84,3 +85,16 @@ def disk_cache(func):
         return result
 
     return wrapper
+
+def maybe_download_drive_folder(destination_folder, file_ids):
+    destination_folder = destination_folder.as_posix() + '/'
+    if os.path.exists(destination_folder):
+        print("Folder already exists")
+        return
+
+    if not os.path.exists(destination_folder):
+        os.makedirs(destination_folder)
+
+    for file_id in file_ids:
+        cmd = f"gdown https://drive.google.com/uc?id={file_id} -O {destination_folder}"
+        subprocess.call(cmd, shell=True)
