@@ -86,7 +86,6 @@ class SmokeConfig(BaseConfig):
     finetune_num_episodes: int = 2
     finetune_epochs: int = 2
     finetune_num_workers = 0
-
     online_num_episodes: int = 1
     online_epochs: int = 1
     online_train_intervals: int = 1

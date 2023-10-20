@@ -3,7 +3,6 @@ import copy
 import pathlib
 import hashlib
 import argparse
-import subprocess
 
 import wandb
 import torch
@@ -16,10 +15,17 @@ from lightning.pytorch import LightningModule
 
 import configs
 from adaptive_hci.controllers import PLModel
+from adaptive_hci.utils import maybe_download_drive_folder
 from adaptive_hci.datasets import EMGWindowsAdaptationDataset, \
     get_concatenated_user_episodes, \
     load_online_episodes
 
+
+file_ids = [
+    "1-ZARLHsK1k958Bk2-mlQdrRblLreM8_j",
+    "1-jjFfGdP5Y8lUk6_prdUSdRmpfEH0W3w",
+    "1-hCAag7xc3_l7u8bHUfUNOTe0j95ZGrz",
+]
 
 def main(finetuned_model: LightningModule, user_hash, config: configs.BaseConfig) -> LightningModule:
     maybe_download_drive_folder()
@@ -37,7 +43,9 @@ def main(finetuned_model: LightningModule, user_hash, config: configs.BaseConfig
     pl_model.lr = config.online_lr
 
     online_data_dir = pathlib.Path('datasets/OnlineAdaptation')
-    episode_filenames = sorted(os.listdir(online_data_dir))
+    maybe_download_drive_folder(online_data_dir, file_ids=file_ids)
+
+    episode_filenames = sorted(os.listdir(online_data_dir))    
     online_data = load_online_episodes(online_data_dir, episode_filenames)
 
     # include other online data?
@@ -96,26 +104,6 @@ def sweep_wrapper():
     main(finetuned_model=pl_model,
          user_hash=user_hash,
          config=None)
-
-
-def maybe_download_drive_folder():
-    destination_folder = "datasets/OnlineAdaptation/"
-    if os.path.exists(destination_folder):
-        print("Folder already exists")
-        return
-
-    if not os.path.exists(destination_folder):
-        os.makedirs(destination_folder)
-
-    file_ids = [
-        "1-ZARLHsK1k958Bk2-mlQdrRblLreM8_j",
-        "1-jjFfGdP5Y8lUk6_prdUSdRmpfEH0W3w",
-        "1-hCAag7xc3_l7u8bHUfUNOTe0j95ZGrz",
-    ]
-
-    for file_id in file_ids:
-        cmd = f"gdown https://drive.google.com/uc?id={file_id} -O {destination_folder}"  # TODO: is gdown installed as part of the requirements?
-        subprocess.call(cmd, shell=True)
 
 
 if __name__ == '__main__':
