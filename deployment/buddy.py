@@ -12,7 +12,7 @@ def buddy_setup(exp_config: configs.BaseConfig, entity):
         entity=entity,
         settings=wandb.Settings(start_method="thread"),
         save_code=True,
-        config=dataclasses.asdict(exp_config)
+        config=exp_config.model_dump(),
     )
     hostname = exp_config.hostname
     sweep_config = exp_config.sweep_config
