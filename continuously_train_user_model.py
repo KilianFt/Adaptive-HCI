@@ -28,9 +28,6 @@ file_ids = [
 ]
 
 def main(finetuned_model: LightningModule, user_hash, config: configs.BaseConfig) -> LightningModule:
-    maybe_download_drive_folder()
-    _ = wandb.init()  # TODO: do we need to reinit in the pipeline case? if not, we should init wandb outside
-
     # load wandb config if sweep
     if config is None:
         config = wandb.config
@@ -68,7 +65,7 @@ def main(finetuned_model: LightningModule, user_hash, config: configs.BaseConfig
 
         val_dataset = EMGWindowsAdaptationDataset(episode.observations, episode.actions)
         val_dataloader = DataLoader(
-            val_dataset, batch_size=config.online_batch_size, num_workers=config.finetune_num_workers)
+            val_dataset, batch_size=config.online_batch_size, num_workers=config.online_adaptation_num_workers)
 
         hist = trainer.validate(model=pl_model, dataloaders=val_dataloader)
         results.append(hist[0])
@@ -99,6 +96,7 @@ def main(finetuned_model: LightningModule, user_hash, config: configs.BaseConfig
 
 
 def sweep_wrapper():
+    _ = wandb.init()
     pl_model = PLModel.load_from_checkpoint('./adaptive_hci/yp8k1lmf/checkpoints/epoch=0-step=100.ckpt')
     user_hash = hashlib.sha256("Kilian".encode("utf-8")).hexdigest()
     main(finetuned_model=pl_model,
@@ -123,6 +121,8 @@ if __name__ == '__main__':
             'name': 'sweep',
             'metric': {'goal': 'maximize', 'name': 'mean_f1'},
             'parameters': {
+                'limit_train_batches': {'value': 200},
+                'online_adaptation_num_workers': {'value': 8},
                 'online_batch_size': {'values': [16, 32, 64]},
                 'online_epochs': {'max': 10, 'min': 1},
                 'online_lr': {'max': 0.005, 'min': 0.0001},

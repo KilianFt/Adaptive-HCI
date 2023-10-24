@@ -52,7 +52,11 @@ class BaseConfig:
     online_adaptation_num_workers = 8
 
     def __post_init__(self):
-        # TODO: assert all parameters have a typehint otherwise to_dict doesn't parse them?!?!?
+        # assert if all parameters have a typehint
+        all_vars = dir(self)
+        parameters = [var for var in all_vars if not callable(getattr(self, var)) and not var.startswith('_')]
+        assert len(parameters) == len(dataclasses.fields(self)), 'Some parameters do not have a type, please specify'
+
         if self.sweep_config:
             self.proc_num = 4
         if isinstance(self.data_source, str):  # TODO: tihs is bad, either pydantic or python 3.11 could fix it maybe
