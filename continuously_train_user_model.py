@@ -126,7 +126,6 @@ if __name__ == '__main__':
                 'online_batch_size': {'values': [16, 32, 64]},
                 'online_epochs': {'max': 10, 'min': 1},
                 'online_lr': {'max': 0.005, 'min': 0.0001},
-                'online_model_class': {'value': 'ViT'},
                 'online_num_episodes': {'value': None},
                 'online_n_frozen_layers': {'max': 2, 'min': 0},
                 'online_train_intervals': {'max': 5, 'min': 1},

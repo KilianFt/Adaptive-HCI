@@ -20,7 +20,7 @@ class BaseConfig(BaseModel):
     lr: float = 0.0007
     window_size: int = 200
     overlap: int = 150
-    model_class: str = 'ViT'
+    base_model_class: str = 'ViT'
     patch_size: int = 8
     dim: int = 64
     depth: int = 1
