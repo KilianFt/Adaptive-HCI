@@ -19,9 +19,10 @@ def main():
     entity = "delvermm" if "delverm" in os.getlogin() else "kilian"
     logger, experiment_config = buddy_setup(experiment_config, entity=entity)
 
-    general_model = train_general_model.main(logger, experiment_config)
+    general_model = train_general_model.main(experiment_config)
     for user_hash in train_users:
         initial_model = copy.deepcopy(general_model)
+
         finetuned_user_model = finetune_user_model.main(initial_model, user_hash, experiment_config)
         user_model = continuously_train_user_model.main(finetuned_user_model, user_hash, experiment_config)
 

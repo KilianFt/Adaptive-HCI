@@ -14,6 +14,7 @@ import configs
 from adaptive_hci.datasets import EMGWindowsAdaptationDataset, \
     get_concatenated_user_episodes, \
     load_online_episodes
+from adaptive_hci.utils import disk_cache
 
 base_configuration = {
     'finetune_batch_size': 32,
@@ -23,6 +24,7 @@ base_configuration = {
 }
 
 
+@disk_cache
 def main(model, user_hash, config: configs.BaseConfig):
     logger = WandbLogger(project='adaptive_hci', tags=["offline_adaptation", user_hash], config=config,
                          name=f"finetune_{config}_{user_hash[:15]}")

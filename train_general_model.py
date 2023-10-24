@@ -8,6 +8,7 @@ import configs
 from adaptive_hci import utils
 from adaptive_hci.datasets import CombinedDataset, EMGWindowsDataset
 from adaptive_hci.controllers import EMGViT, PLModel
+from adaptive_hci.utils import disk_cache
 from common import DataSourceEnum
 
 
@@ -56,7 +57,8 @@ def get_dataset(config: configs.BaseConfig):
     return dataset
 
 
-def main(logger, experiment_config: configs.BaseConfig) -> nn.Module:
+@disk_cache
+def main(experiment_config: configs.BaseConfig) -> nn.Module:
     # TODO can we just ignore other logger?
     pl_logger = WandbLogger()
 
@@ -81,12 +83,6 @@ def main(logger, experiment_config: configs.BaseConfig) -> nn.Module:
     trainer = pl.Trainer(limit_train_batches=experiment_config.limit_train_batches,
                          max_epochs=experiment_config.pretraining_epochs, log_every_n_steps=1, logger=pl_logger, )
     trainer.fit(model=pl_model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
-
-    # if experiment_config.save_checkpoints:
-    #     model_save_path = f"models/{model_name}.pt"
-    #     print('Saved model at', model_save_path)
-    #     torch.save(model.cpu(), model_save_path)
-
     return pl_model
 
 

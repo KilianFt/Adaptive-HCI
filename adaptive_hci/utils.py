@@ -4,9 +4,12 @@ import json
 import os
 import pickle
 from functools import wraps
+from io import BytesIO
 
 import numpy as np
 import torch
+
+from adaptive_hci.controllers import PLModel
 
 
 def labels_to_onehot(label):
@@ -59,15 +62,28 @@ class EnhancedJSONEncoder(json.JSONEncoder):
         return super().default(o)
 
 
+def custom_hash(obj):
+    if isinstance(obj, PLModel):  # Should be pl.LightningModule but isinstance doesn't work
+        buffer = BytesIO()
+        torch.save(obj.state_dict(), buffer)
+        obj_hash = hashlib.sha256(buffer.getvalue()).hexdigest()
+    else:
+        arg_str = pickle.dumps(obj)
+        obj_hash = hashlib.sha256(arg_str).hexdigest()
+    return obj_hash
+
 def disk_cache(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
         # Create cache directory if it doesn't exist
-        cache_dir = f'cache/{func.__name__}'
+        cache_dir = f'cache/{func.__module__}/{func.__name__}'
         os.makedirs(cache_dir, exist_ok=True)
 
-        arg_str = pickle.dumps([args, kwargs])
-        arg_hash = hashlib.sha256(arg_str).hexdigest()
+        arg_hashes = []
+        for obj in [*args, *kwargs.values()]:
+            arg_hashes.append(custom_hash(obj))
+
+        arg_hash = custom_hash(arg_hashes)
         cache_file_path = os.path.join(cache_dir, f'{arg_hash}.json')
 
         if os.path.exists(cache_file_path):
