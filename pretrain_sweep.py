@@ -31,7 +31,7 @@ def train_emg_decoder():
     test_dataset = EMGWindowsDataset('ninapro5_test',
                                     window_size=wandb.config.window_size,
                                     overlap=wandb.config.overlap)
-    
+
 
     train_dataset = CombinedDataset(mad_dataset, ninapro5_train_dataset)
 
@@ -60,13 +60,13 @@ def train_emg_decoder():
     wandb.config.model_class = model.__class__.__name__
 
     model, _ = train_model(model=model,
-                                 optimizer=optimizer,
-                                 criterion=criterion,
-                                 train_dataloader=train_dataloader,
-                                 test_dataloader=test_dataloader,
-                                 device=device,
-                                 epochs=wandb.config.epochs,
-                                 wandb_logging=True)
+                           optimizer=optimizer,
+                           criterion=criterion,
+                           train_dataloader=train_dataloader,
+                           test_dataloader=test_dataloader,
+                           device=device,
+                           epochs=wandb.config.pretraining_epochs,
+                           wandb_logging=True)
 
     return model
 

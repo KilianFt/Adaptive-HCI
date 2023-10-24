@@ -12,8 +12,8 @@ from lightning.pytorch.loggers import WandbLogger
 import configs
 from adaptive_hci.utils import maybe_download_drive_folder
 from adaptive_hci.datasets import EMGWindowsAdaptationDataset, \
-                                  get_concatenated_user_episodes, \
-                                  load_online_episodes
+    get_concatenated_user_episodes, \
+    load_online_episodes
 
 base_configuration = {
     'finetune_batch_size': 32,
@@ -22,7 +22,6 @@ base_configuration = {
     'finetune_n_frozen_layers': 2,
 }
 
-
 file_ids = [
     "1Sitb0ooo2izvkHQGNQkXTGoDV4CJAnFF",
     "1bIYLJVu-SqHzRnTFxuc1vkzRBs8Ll5Oi",
@@ -30,12 +29,10 @@ file_ids = [
     "1EWJdHHZ22xorZEpss-gf5R4cxehEs9pt",
 ]
 
-def main(base_pl_model, user_hash, config: configs.BaseConfig):
-    pl_model = copy.deepcopy(base_pl_model)
 
-    logger = WandbLogger(project='adaptive_hci',
-                         tags=["offline_adaptation", user_hash],
-                         config=config,
+def main(model, user_hash, config: configs.BaseConfig):
+    logger = WandbLogger(project='adaptive_hci', tags=["offline_adaptation", user_hash], config=config,
+
                          name=f"finetune_{config}_{user_hash[:15]}")
 
     online_data_dir = pathlib.Path('datasets/OnlineData')
@@ -76,24 +73,19 @@ def main(base_pl_model, user_hash, config: configs.BaseConfig):
     train_offline_adaption_dataset = EMGWindowsAdaptationDataset(train_observations, train_optimal_actions)
     val_offline_adaption_dataset = EMGWindowsAdaptationDataset(val_observations, val_optimal_actions)
 
-    dataloader_args = dict(batch_size=config.finetune_batch_size, num_workers=8)
+    dataloader_args = dict(batch_size=config.finetune_batch_size, num_workers=config.finetune_num_workers)
 
     train_dataloader = DataLoader(train_offline_adaption_dataset, shuffle=True, **dataloader_args)
     val_dataloader = DataLoader(val_offline_adaption_dataset, **dataloader_args)
 
-    pl_model.lr = config.finetune_lr
-    pl_model.freeze_layers(config.finetune_n_frozen_layers)
+    model.lr = config.finetune_lr
+    model.freeze_layers(config.finetune_n_frozen_layers)
 
-    trainer = pl.Trainer(limit_train_batches=100,
-                        max_epochs=config.finetune_epochs,
-                        log_every_n_steps=1,
-                        logger=logger,
-                        )
-    trainer.fit(model=pl_model,
-                train_dataloaders=train_dataloader,
-                val_dataloaders=val_dataloader)
+    trainer = pl.Trainer(limit_train_batches=config.limit_train_batches, max_epochs=config.finetune_epochs,
+                         log_every_n_steps=1, logger=logger)
 
-    return pl_model
+    trainer.fit(model=model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
+    return model
 
 
 if __name__ == '__main__':

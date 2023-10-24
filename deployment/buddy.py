@@ -5,7 +5,7 @@ import configs
 import experiment_buddy
 
 
-def buddy_setup(exp_config: configs.BaseConfig, entity="delvermm"):
+def buddy_setup(exp_config: configs.BaseConfig, entity):
     import wandb
     wandb_kwargs = dict(
         monitor_gym=False,
@@ -63,5 +63,5 @@ def buddy_setup(exp_config: configs.BaseConfig, entity="delvermm"):
             proc_num=proc_num,
             extra_modules=extra_modules
         )
-    exp_config = configs.BaseConfig(**tb.run.config)
-    return tb, exp_config
+    updated_exp_config = exp_config.__class__(**tb.run.config)
+    return tb, updated_exp_config

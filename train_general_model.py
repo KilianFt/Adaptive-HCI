@@ -14,8 +14,7 @@ from common import DataSourceEnum
 def get_dataset_(config: configs.BaseConfig):
     dataset = get_dataset(config)
 
-    train_dataset, test_dataset = random_split(dataset, [
-        1 - config.train_fraction, config.train_fraction])
+    train_dataset, test_dataset = random_split(dataset, [1 - config.train_fraction, config.train_fraction])
 
     dataloader_args = dict(batch_size=config.batch_size, drop_last=False, num_workers=8)
 
@@ -79,15 +78,9 @@ def main(logger, experiment_config: configs.BaseConfig) -> nn.Module:
     assert experiment_config.loss in ["MSELoss"], "Only MSELoss is supported for now"
 
     pl_model = PLModel(vit, n_labels=n_labels)
-
-    trainer = pl.Trainer(limit_train_batches=100,
-                         max_epochs=1,
-                         log_every_n_steps=1,
-                         logger=pl_logger,
-                         )
-    trainer.fit(model=pl_model,
-                train_dataloaders=train_dataloader,
-                val_dataloaders=val_dataloader)
+    trainer = pl.Trainer(limit_train_batches=experiment_config.limit_train_batches,
+                         max_epochs=experiment_config.pretraining_epochs, log_every_n_steps=1, logger=pl_logger, )
+    trainer.fit(model=pl_model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 
     # if experiment_config.save_checkpoints:
     #     model_save_path = f"models/{model_name}.pt"

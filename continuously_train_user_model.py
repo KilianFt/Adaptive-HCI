@@ -17,8 +17,9 @@ import configs
 from adaptive_hci.controllers import PLModel
 from adaptive_hci.utils import maybe_download_drive_folder
 from adaptive_hci.datasets import EMGWindowsAdaptationDataset, \
-                                  get_concatenated_user_episodes, \
-                                  load_online_episodes
+    get_concatenated_user_episodes, \
+    load_online_episodes
+
 
 file_ids = [
     "1-ZARLHsK1k958Bk2-mlQdrRblLreM8_j",
@@ -27,15 +28,11 @@ file_ids = [
 ]
 
 def main(finetuned_model: LightningModule, user_hash, config: configs.BaseConfig) -> LightningModule:
-    _ = wandb.init()
-
     # load wandb config if sweep
     if config is None:
         config = wandb.config
 
-    logger = WandbLogger(project='adaptive_hci',
-                         tags=["online_adaptation", user_hash],
-                         config=config,
+    logger = WandbLogger(project='adaptive_hci', tags=["online_adaptation", user_hash], config=config,
                          name=f"online_adapt_{config}_{user_hash[:15]}")
 
     pl_model = copy.deepcopy(finetuned_model)
@@ -48,23 +45,11 @@ def main(finetuned_model: LightningModule, user_hash, config: configs.BaseConfig
     episode_filenames = sorted(os.listdir(online_data_dir))    
     online_data = load_online_episodes(online_data_dir, episode_filenames)
 
-    artifact = wandb.Artifact(name="online_adaptation_data", type="dataset")
-    artifact.add_dir(online_data_dir, name='online_adaptation_data')
-    wandb.run.log_artifact(artifact)
-
     # include other online data?
     current_trial_episodes = online_data[0]
 
-    (observations,
-     actions,
-     optimal_actions,
-     rewards,
-     terminals) = get_concatenated_user_episodes(episodes=current_trial_episodes)
-    
-    rl_dataset = MDPDataset(observations=observations,
-                            actions=optimal_actions,
-                            rewards=rewards,
-                            terminals=terminals)
+    observations, actions, optimal_actions, rewards, terminals = get_concatenated_user_episodes(current_trial_episodes)
+    rl_dataset = MDPDataset(observations=observations, actions=optimal_actions, rewards=rewards, terminals=terminals)
 
     if config.online_num_episodes is not None:
         all_episodes = rl_dataset.episodes[:config.online_num_episodes]
@@ -75,25 +60,18 @@ def main(finetuned_model: LightningModule, user_hash, config: configs.BaseConfig
     results = []
     for ep_idx, episode in enumerate(all_episodes):
         # Can we avoid reloading the trainer? problem is that max_epochs only works with calling fit once
-        trainer = pl.Trainer(limit_train_batches=100,
-                    max_epochs=config.online_epochs,
-                    log_every_n_steps=1,
-                    logger=logger,
-                    )
-            
-        # validation
+        trainer = pl.Trainer(limit_train_batches=config.limit_train_batches, max_epochs=config.online_epochs,
+                             log_every_n_steps=1, logger=logger)
+
         val_dataset = EMGWindowsAdaptationDataset(episode.observations, episode.actions)
-        val_dataloader = DataLoader(val_dataset,
-                                    batch_size=config.online_batch_size,
-                                    num_workers=8)
-    
+        val_dataloader = DataLoader(
+            val_dataset, batch_size=config.online_batch_size, num_workers=config.online_adaptation_num_workers)
+
         hist = trainer.validate(model=pl_model, dataloaders=val_dataloader)
         results.append(hist[0])
 
-
         # training
         if ep_idx >= config.online_first_training_episode and ep_idx % config.online_train_intervals == 0:
-
             # pick n random past episodes
             if ep_idx > 0:
                 rand_episode_idxs = torch.randint(0, ep_idx, size=(config.online_additional_train_episodes,)).unique()
@@ -105,10 +83,8 @@ def main(finetuned_model: LightningModule, user_hash, config: configs.BaseConfig
             train_observations = np.concatenate([e.observations for e in train_episodes])
             train_actions = np.concatenate([e.actions for e in train_episodes])
             train_dataset = EMGWindowsAdaptationDataset(train_observations, train_actions)
-            train_dataloader = DataLoader(train_dataset,
-                                          batch_size=config.online_batch_size,
-                                          num_workers=8,
-                                          shuffle=True)
+            train_dataloader = DataLoader(train_dataset, batch_size=config.online_batch_size,
+                                          num_workers=config.online_adaptation_num_workers, shuffle=True)
 
             trainer.fit(model=pl_model, train_dataloaders=train_dataloader)
 
@@ -120,6 +96,7 @@ def main(finetuned_model: LightningModule, user_hash, config: configs.BaseConfig
 
 
 def sweep_wrapper():
+    _ = wandb.init()
     pl_model = PLModel.load_from_checkpoint('./adaptive_hci/yp8k1lmf/checkpoints/epoch=0-step=100.ckpt')
     user_hash = hashlib.sha256("Kilian".encode("utf-8")).hexdigest()
     main(finetuned_model=pl_model,
@@ -144,6 +121,8 @@ if __name__ == '__main__':
             'name': 'sweep',
             'metric': {'goal': 'maximize', 'name': 'mean_f1'},
             'parameters': {
+                'limit_train_batches': {'value': 200},
+                'online_adaptation_num_workers': {'value': 8},
                 'online_batch_size': {'values': [16, 32, 64]},
                 'online_epochs': {'max': 10, 'min': 1},
                 'online_lr': {'max': 0.005, 'min': 0.0001},
@@ -161,5 +140,5 @@ if __name__ == '__main__':
     else:
         config = configs.SmokeConfig()
         main(finetuned_model=pl_model,
-            user_hash=user_hash,
-            config=config)
+             user_hash=user_hash,
+             config=config)
