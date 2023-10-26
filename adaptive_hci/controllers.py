@@ -3,7 +3,7 @@ import torch
 from torch import Tensor
 from torch.functional import F
 from stable_baselines3 import PPO
-from torchmetrics import ExactMatch, F1Score
+from torchmetrics import ExactMatch, F1Score, Accuracy
 from vit_pytorch import ViT
 import lightning.pytorch as pl
 
@@ -65,6 +65,7 @@ class PLModel(pl.LightningModule):
         self.criterion = torch.nn.MSELoss()
         self.exact_match = ExactMatch(task="multilabel", num_labels=n_labels, threshold=0.5)
         self.f1_score = F1Score(task="multilabel", num_labels=n_labels, threshold=0.5)
+        self.accuracy_metric = Accuracy(task='binary')
 
         if n_frozen_layers is not None:
             self.freeze_layers(n_frozen_layers)
@@ -97,6 +98,19 @@ class PLModel(pl.LightningModule):
         self.log("train_loss", loss)
         return loss
 
+    def get_per_label_accuracies(self, outputs, targets, threshold = 0.5):
+        num_targets = targets.shape[1]
+        per_labels_accuracies = torch.zeros(num_targets)
+
+        binary_outputs = (outputs >= threshold).int()
+        binary_targets = (targets >= threshold).int()
+
+        for label_idx in range(num_targets):
+            label_acc = self.accuracy_metric(binary_outputs[:,label_idx], binary_targets[:,label_idx])
+            per_labels_accuracies[label_idx] = label_acc
+
+        return per_labels_accuracies
+
     def validation_step(self, batch, batch_idx):
         data, targets = batch
         outputs = self.model(data)
@@ -108,7 +122,10 @@ class PLModel(pl.LightningModule):
         self.log('val_acc', val_acc, prog_bar=True)
         self.log('val_f1', val_f1, prog_bar=True)
 
-        return val_loss, val_acc, val_f1
+        per_label_accuracies = self.get_per_label_accuracies(outputs, targets)
+        self.log('per_label_accuracies', per_label_accuracies, prog_bar=True)
+
+        return val_loss, val_acc, val_f1, per_label_accuracies
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.lr)
