@@ -3,6 +3,7 @@ import time
 import pickle
 
 import numpy as np
+from d3rlpy.dataset import MDPDataset
 from scipy.io import loadmat
 import torch
 from torch.utils import data
@@ -26,6 +27,7 @@ gesture_names = [
     "thumb extension",
 ]
 
+
 def load_online_episodes(base_dir, filenames):
     online_episodes_list = []
     for filename in filenames:
@@ -48,8 +50,8 @@ def get_terminals(episodes, rewards):
 
 
 def get_concatenated_user_episodes(episodes):
-    actions = np.concatenate([predictions_to_onehot(e['actions'].detach().numpy()) \
-                              for e in episodes]).squeeze()
+    actions = np.concatenate([predictions_to_onehot(e['actions'].detach().numpy()) for e in episodes]).squeeze()
+
     optimal_actions = np.concatenate([e['optimal_actions'].detach().numpy() for e in episodes])
     observations = np.concatenate([e['user_signals'] for e in episodes]).squeeze()
     rewards = np.concatenate([e['rewards'] for e in episodes]).squeeze()
@@ -57,6 +59,19 @@ def get_concatenated_user_episodes(episodes):
     terminals = get_terminals(episodes, rewards)
 
     return observations, actions, optimal_actions, rewards, terminals
+
+
+def get_rl_dataset(current_trial_episodes, online_num_episodes):
+    (observations, _, optimal_actions, rewards, terminals) = get_concatenated_user_episodes(current_trial_episodes)
+
+    rl_dataset = MDPDataset(observations=observations, actions=optimal_actions, rewards=rewards, terminals=terminals)
+
+    all_episodes = rl_dataset.episodes
+    if online_num_episodes is not None:
+        all_episodes = rl_dataset.episodes[:online_num_episodes]
+
+    num_classes = rl_dataset.episodes[0].action_signature.shape[0][0]
+    return all_episodes, num_classes
 
 
 def get_raw_mad_dataset(eval_path, window_length, overlap):
