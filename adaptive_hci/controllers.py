@@ -100,16 +100,17 @@ class PLModel(pl.LightningModule):
 
     def get_per_label_accuracies(self, outputs, targets, threshold = 0.5):
         num_targets = targets.shape[1]
-        per_labels_accuracies = torch.zeros(num_targets)
 
         binary_outputs = (outputs >= threshold).int()
         binary_targets = (targets >= threshold).int()
 
+        per_labels_accuracies = []
+
         for label_idx in range(num_targets):
             label_acc = self.accuracy_metric(binary_outputs[:,label_idx], binary_targets[:,label_idx])
-            per_labels_accuracies[label_idx] = label_acc
+            per_labels_accuracies.append(label_acc)
 
-        return per_labels_accuracies
+        return torch.tensor(per_labels_accuracies)
 
     def validation_step(self, batch, batch_idx):
         data, targets = batch
@@ -123,7 +124,8 @@ class PLModel(pl.LightningModule):
         self.log('val_f1', val_f1, prog_bar=True)
 
         per_label_accuracies = self.get_per_label_accuracies(outputs, targets)
-        self.log('per_label_accuracies', per_label_accuracies, prog_bar=True)
+        for label_idx, per_label_acc in enumerate(per_label_accuracies):
+            self.log(f'val_acc_label_{label_idx}', per_label_acc, prog_bar=True)
 
         return val_loss, val_acc, val_f1, per_label_accuracies
 

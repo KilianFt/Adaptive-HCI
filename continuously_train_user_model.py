@@ -42,9 +42,15 @@ def sweep_wrapper():
     main(pl_model, user_hash, config=None)
 
 
-def prepare_data(ep_idx, config, all_episodes):
-    observations = [all_episodes[ep_idx].observations]
-    actions = [all_episodes[ep_idx].actions]
+def prepare_data(ep_idx, config, all_episodes, episode_metrics):
+    if config.online_adaptive_training:
+        per_label_accuracies = np.array([episode_metrics[f'val_acc_label_{label_idx}'][-1] for label_idx in range(config.num_classes)])
+        current_episode = datasets.get_adaptive_episode(all_episodes, per_label_accuracies)
+    else:
+        current_episode = all_episodes[ep_idx]
+
+    observations = [current_episode.observations]
+    actions = [current_episode.actions]
     if ep_idx > 0:
         num_samples = min(config.online_additional_train_episodes, len(all_episodes))
         for e in random.sample(all_episodes, num_samples):
@@ -85,7 +91,7 @@ def process_session(config, current_trial_episodes, logger, pl_model, session_id
             episode_metrics[k].append(v)
 
         if ep_idx >= config.online_first_training_episode and ep_idx % config.online_train_intervals == 0:
-            train_dataset = prepare_data(ep_idx, config, all_episodes)
+            train_dataset = prepare_data(ep_idx, config, all_episodes, episode_metrics)
             replay_buffer.extend(train_dataset)
 
             if len(replay_buffer) > 0:

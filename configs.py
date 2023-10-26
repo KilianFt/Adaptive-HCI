@@ -20,6 +20,7 @@ class BaseConfig(BaseModel):
     lr: float = 0.0007
     window_size: int = 200
     overlap: int = 150
+    num_classes: int = 5
     base_model_class: str = 'ViT'
     patch_size: int = 8
     dim: int = 64
@@ -45,6 +46,7 @@ class BaseConfig(BaseModel):
     online_train_intervals: int = 4
     online_first_training_episode: int = 0
     online_additional_train_episodes: int = 4
+    online_adaptive_training: bool = True
     hostname: str = ""
     # hostname: str = "mila"
     # hostname: str = "cc-cedar"

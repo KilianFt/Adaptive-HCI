@@ -2,6 +2,7 @@ import dataclasses
 import os
 import pickle
 import time
+import random
 
 import numpy as np
 import torch
@@ -27,6 +28,60 @@ gesture_names = [
     "thumb flexion",
     "thumb extension",
 ]
+
+
+def get_episode_modes(episodes, n_samples_considered: int = 20):
+    modes = []
+    for ep in episodes:
+        unique_actions, counts = np.unique(ep.actions[:n_samples_considered], return_counts=True, axis=0)
+        main_action = unique_actions[np.argmax(counts)]
+        modes.append(main_action)
+
+    return modes
+
+
+def find_closest_episode(episodes, target_row):
+    ep_modes = get_episode_modes(episodes)
+
+    distances = np.linalg.norm(ep_modes - target_row, axis=1)
+    min_distance_indices = np.where(distances == distances.min())[0]
+    closest_row_index = random.choice(min_distance_indices)
+
+    return episodes[closest_row_index]
+
+
+def get_adaptive_episode(episodes, label_accuracies):
+    worst_label = np.zeros_like(label_accuracies)
+    worst_label[np.argmin(label_accuracies)] = 1.
+    closest_episode = find_closest_episode(episodes, worst_label)
+    return closest_episode
+
+
+def get_episode_modes(episodes, n_samples_considered: int = 20):
+    modes = []
+    for ep in episodes:
+        unique_actions, counts = np.unique(ep.actions[:n_samples_considered], return_counts=True, axis=0)
+        main_action = unique_actions[np.argmax(counts)]
+        modes.append(main_action)
+
+    return modes
+
+
+def find_closest_episode(episodes, target_row):
+    ep_modes = get_episode_modes(episodes)
+
+    distances = np.linalg.norm(ep_modes - target_row, axis=1)
+    min_distance_indices = np.where(distances == distances.min())[0]
+    closest_row_index = random.choice(min_distance_indices)
+
+    return episodes[closest_row_index]
+
+
+def get_adaptive_episode(episodes, label_accuracies):
+    worst_label = np.zeros_like(label_accuracies)
+    worst_label[np.argmin(label_accuracies)] = 1.
+    closest_episode = find_closest_episode(episodes, worst_label)
+    return closest_episode
 
 
 def to_tensor_dataset(train_observations, train_actions):
