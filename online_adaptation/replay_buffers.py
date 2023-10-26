@@ -1,45 +1,43 @@
 import random
-from collections import deque
+import collections
 
 import numpy as np
 import torch
+from torch.utils.data import Dataset
+
+base = torch.tensor([2 ** i for i in reversed(range(5))], dtype=torch.float32)
 
 
-class ReplayBuffer:
+class ReplayBuffer(Dataset):
     def __init__(self, max_size, num_classes):
-        self.buffers = [deque(maxlen=max_size) for _ in range(num_classes)]
-        self.class_counters = np.zeros(num_classes)
+        self.buffers = {k: collections.deque(maxlen=max_size) for k in range(num_classes)}
 
-    def add(self, observations: torch.Tensor, actions: torch.Tensor):
-        assert (actions.long() == actions).all(), "Actions must be integers"
-        # TODO: Can be sped up by np indexing observations and actions
-        for observation, action in zip(observations, actions.long()):
-            self.buffers[action.item()].append(observation)
+    def add(self, observation: torch.Tensor, action: torch.Tensor):
+        assert (action.long() == action).all(), "Actions must be integers"
+        targets = action.argwhere().flatten().tolist()
+        for target in targets:
+            self.buffers[target].append(observation)
 
     def extend(self, dataset):
-        for experience in dataset:
-            self.add(*experience)
+        for x, y in dataset:  # TODO: This for loop sucks
+            self.add(x, y)
 
-    def sample(self, batch_size):
-        samples_per_class = batch_size // len(self.buffers)
-        remainder = batch_size % len(self.buffers)
+    @property
+    def num_classes(self):
+        return len(self.buffers.values())
 
-        sampled_data = []
-        for idx, class_buffer in enumerate(self.buffers):
-            samples = random.sample(class_buffer, min(samples_per_class, len(class_buffer)))
-            sampled_data.extend(samples)
-
-        # Take care of remainder
-        if remainder > 0:
-            additional_samples = random.choices(self.buffers, k=remainder)
-            for class_buffer in additional_samples:
-                if len(class_buffer) > 0:
-                    sampled_data.append(random.choice(class_buffer))
-
-        return torch.stack(sampled_data)
+    def __getitem__(self, sample_idx):
+        # TODO: this is not ok, nor deterministic
+        classes = list(self.buffers.keys())
+        classes.remove(0) # 0 is unused for now.
+        class_idx = random.choice(classes)
+        class_onehot = torch.zeros(self.num_classes)
+        class_onehot[class_idx] = 1
+        return random.choice(self.buffers[class_idx]), class_onehot
 
     def __len__(self):
-        return min(len(b) for b in self.buffers)
+        # 0 is unused for now.
+        return min(len(v) for k, v in self.buffers.items() if k != 0)
 
 
 if __name__ == '__main__':

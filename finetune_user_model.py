@@ -1,19 +1,16 @@
 import os
 import pathlib
 import sys
-import copy
 
-import wandb
-import torch
-from torch.utils.data import DataLoader
 import lightning.pytorch as pl
+import torch
+import wandb
 from lightning.pytorch.loggers import WandbLogger
+from torch.utils.data import DataLoader, TensorDataset
 
 import configs
+from adaptive_hci.datasets import get_concatenated_user_episodes, load_online_episodes, to_tensor_dataset
 from adaptive_hci.utils import maybe_download_drive_folder
-from adaptive_hci.datasets import EMGWindowsAdaptationDataset, \
-    get_concatenated_user_episodes, \
-    load_online_episodes
 
 base_configuration = {
     'finetune_batch_size': 32,
@@ -44,10 +41,8 @@ def main(model, user_hash, config: configs.BaseConfig):
     artifact.add_dir(online_data_dir, name='offline_adaptattion_data')
     wandb.run.log_artifact(artifact)
 
-    episode_list = load_online_episodes(online_data_dir, episode_filenames)
+    episode_list = load_online_episodes(online_data_dir, episode_filenames, config.finetune_num_episodes)
 
-    if config.finetune_num_episodes is not None:
-        episode_list = episode_list[:config.finetune_num_episodes]
 
     train_episodes = []
     for ep in episode_list[:-1]:
@@ -70,8 +65,8 @@ def main(model, user_hash, config: configs.BaseConfig):
      val_rewards,
      val_terminals) = get_concatenated_user_episodes(episodes=val_episodes)
 
-    train_offline_adaption_dataset = EMGWindowsAdaptationDataset(train_observations, train_optimal_actions)
-    val_offline_adaption_dataset = EMGWindowsAdaptationDataset(val_observations, val_optimal_actions)
+    train_offline_adaption_dataset = to_tensor_dataset(train_observations, train_optimal_actions)
+    val_offline_adaption_dataset = to_tensor_dataset(val_observations, val_optimal_actions)
 
     dataloader_args = dict(batch_size=config.finetune_batch_size, num_workers=config.finetune_num_workers)
 

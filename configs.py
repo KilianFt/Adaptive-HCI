@@ -1,6 +1,6 @@
 import hashlib
 import pickle
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -40,6 +40,7 @@ class BaseConfig(BaseModel):
     online_batch_size: int = 16
     online_epochs: int = 9
     online_lr: float = 3.5e-3
+    online_num_sessions: Optional[int] = None
     online_n_frozen_layers: int = 2
     online_train_intervals: int = 4
     online_first_training_episode: int = 0
@@ -92,8 +93,9 @@ class SmokeConfig(BaseConfig):
     finetune_epochs: int = 2
     finetune_num_workers: int = 0
 
-    online_num_episodes: int = 1
+    online_num_episodes: int = 2
     online_epochs: int = 1
+    online_num_sessions: Optional[int] = 2
     online_train_intervals: int = 1
     online_first_training_episode: int = 0
     online_adaptation_num_workers: int = 0

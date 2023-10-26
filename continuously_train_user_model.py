@@ -1,7 +1,9 @@
 import argparse
+import collections
 import hashlib
 import os
 import pathlib
+import random
 
 import lightning.pytorch as pl
 import numpy as np
@@ -14,6 +16,7 @@ from torch.utils.data import DataLoader
 import configs
 from adaptive_hci import datasets
 from adaptive_hci.controllers import PLModel
+from adaptive_hci.datasets import to_tensor_dataset
 from adaptive_hci.utils import maybe_download_drive_folder
 from online_adaptation import replay_buffers
 
@@ -24,11 +27,11 @@ file_ids = [
 ]
 
 
-def get_stored_sessions():
+def get_stored_sessions(config):
     online_data_dir = pathlib.Path('datasets/OnlineAdaptation')
     maybe_download_drive_folder(online_data_dir, file_ids=file_ids)
     episode_filenames = sorted(os.listdir(online_data_dir))
-    online_sessions = datasets.load_online_episodes(online_data_dir, episode_filenames)
+    online_sessions = datasets.load_online_episodes(online_data_dir, episode_filenames, config.online_num_sessions)
     return online_sessions
 
 
@@ -40,21 +43,20 @@ def sweep_wrapper():
 
 
 def prepare_data(ep_idx, config, all_episodes):
-    if ep_idx >= config.online_first_training_episode and ep_idx % config.online_train_intervals == 0:
-        if ep_idx > 0:
-            rand_episode_idxs = torch.randint(0, ep_idx, size=(config.online_additional_train_episodes,)).unique()
-            train_episodes = [all_episodes[r_e_idx] for r_e_idx in rand_episode_idxs]
-            train_episodes.append(all_episodes[ep_idx])
-        else:
-            train_episodes = [all_episodes[ep_idx]]
+    observations = [all_episodes[ep_idx].observations]
+    actions = [all_episodes[ep_idx].actions]
+    if ep_idx > 0:
+        num_samples = min(config.online_additional_train_episodes, len(all_episodes))
+        for e in random.sample(all_episodes, num_samples):
+            observations.append(e.observations)
+            actions.append(e.actions)
 
-    train_observations = np.concatenate([e.observations for e in train_episodes])
-    train_actions = np.concatenate([e.actions for e in train_episodes])
-    return datasets.EMGWindowsAdaptationDataset(train_observations, train_actions)
+    train_observations = np.concatenate(observations)
+    train_actions = np.concatenate(actions)
+    return to_tensor_dataset(train_observations, train_actions)
 
 
-def validate_model(trainer, pl_model, rollout, config):
-    val_dataset = datasets.EMGWindowsAdaptationDataset(rollout.observations, rollout.actions)
+def validate_model(trainer, pl_model, val_dataset, config):
     val_dataloader = DataLoader(val_dataset, batch_size=config.online_batch_size,
                                 num_workers=config.online_adaptation_num_workers)
     hist, = trainer.validate(model=pl_model, dataloaders=val_dataloader)
@@ -67,6 +69,31 @@ def train_model(trainer, pl_model, train_dataset, config):
     trainer.fit(model=pl_model, train_dataloaders=train_dataloader)
 
 
+def process_session(config, current_trial_episodes, logger, pl_model, session_idx):
+    all_episodes, num_classes = datasets.get_rl_dataset(current_trial_episodes, config.online_num_episodes)
+    episode_metrics = collections.defaultdict(list)
+    replay_buffer = replay_buffers.ReplayBuffer(max_size=1_000, num_classes=num_classes)
+    trainer = pl.Trainer(limit_train_batches=config.limit_train_batches, max_epochs=0, log_every_n_steps=1,
+                         logger=logger)
+    for ep_idx, rollout in enumerate(all_episodes):
+        trainer.fit_loop.max_epochs += config.online_epochs
+
+        val_dataset = to_tensor_dataset(rollout.observations, rollout.actions)
+        validation_metrics = validate_model(trainer, pl_model, val_dataset, config)
+
+        for k, v in validation_metrics.items():
+            episode_metrics[k].append(v)
+
+        if ep_idx >= config.online_first_training_episode and ep_idx % config.online_train_intervals == 0:
+            train_dataset = prepare_data(ep_idx, config, all_episodes)
+            replay_buffer.extend(train_dataset)
+
+            if len(replay_buffer) > 0:
+                train_model(trainer, pl_model, replay_buffer, config)
+
+        wandb.run.log({f'session_{session_idx}/{k}': v for k, v in episode_metrics.items()}, commit=False)
+
+
 def main(pl_model: LightningModule, user_hash, config: configs.BaseConfig) -> LightningModule:
     if config is None:
         config = wandb.config
@@ -74,45 +101,15 @@ def main(pl_model: LightningModule, user_hash, config: configs.BaseConfig) -> Li
     pl_model.freeze_layers(config.online_n_frozen_layers)
     pl_model.lr = config.online_lr
 
-    logger = WandbLogger(
-        project='adaptive_hci',
-        tags=["online_adaptation", user_hash],
-        config=config,
-        name=f"online_adapt_{config}_{user_hash[:15]}"
-    )
-    online_sessions = get_stored_sessions()
+    logger = WandbLogger(project='adaptive_hci', tags=["online_adaptation", user_hash],
+                         config=config, name=f"online_adapt_{config}_{user_hash[:15]}")
+
+    online_sessions = get_stored_sessions(config)
 
     for session_idx, current_trial_episodes in enumerate(online_sessions):
-        all_episodes, num_classes = datasets.get_rl_dataset(
-            current_trial_episodes, online_num_episodes=config.online_num_episodes)
+        process_session(config, current_trial_episodes, logger, pl_model, session_idx)
 
-        # simulate online data replay
-        results = []
-
-        replay_buffer = replay_buffers.ReplayBuffer(max_size=1_000, num_classes=num_classes)
-
-        trainer = pl.Trainer(
-            limit_train_batches=config.limit_train_batches, max_epochs=0, log_every_n_steps=1, logger=logger)
-
-        for ep_idx, rollout in enumerate(all_episodes):
-            trainer.fit_loop.max_epochs += config.online_epochs
-
-            hist = validate_model(trainer, pl_model, rollout, config)
-            results.append(hist)
-
-            if ep_idx >= config.online_first_training_episode and ep_idx % config.online_train_intervals == 0:
-                train_dataset = prepare_data(ep_idx, config, all_episodes)
-                replay_buffer.extend(train_dataset)
-
-                # TODO: figure out why train_model doesn't crash
-                if len(replay_buffer) > 0:
-                    # Ensure we have at least one sample per class
-                    train_model(trainer, pl_model, replay_buffer, config)
-
-        wandb.run.log({
-            f'session_{session_idx}/mean_accuracy': np.mean([r['val_acc'] for r in results]),
-            f'session_{session_idx}/mean_f1': np.mean([r['val_f1'] for r in results]),
-        })
+    wandb.run.log({}, commit=True)
     return pl_model
 
 

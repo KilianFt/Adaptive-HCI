@@ -1,12 +1,13 @@
+import dataclasses
 import os
-import time
 import pickle
+import time
 
 import numpy as np
-from d3rlpy.dataset import MDPDataset
-from scipy.io import loadmat
 import torch
+from scipy.io import loadmat
 from torch.utils import data
+from torch.utils.data import TensorDataset
 
 from common import DataSourceEnum
 from .utils import labels_to_onehot, predictions_to_onehot
@@ -28,8 +29,20 @@ gesture_names = [
 ]
 
 
-def load_online_episodes(base_dir, filenames):
+def to_tensor_dataset(train_observations, train_actions):
+    ds = TensorDataset(
+        torch.tensor(train_observations, dtype=torch.float32),
+        torch.tensor(train_actions, dtype=torch.float32)
+    )
+    return ds
+
+
+def load_online_episodes(base_dir, filenames, num_episodes):
     online_episodes_list = []
+
+    if num_episodes is not None:
+        filenames = filenames[:num_episodes]
+
     for filename in filenames:
         filepath = base_dir / filename
         with open(filepath, 'rb') as f:
@@ -61,16 +74,38 @@ def get_concatenated_user_episodes(episodes):
     return observations, actions, optimal_actions, rewards, terminals
 
 
+@dataclasses.dataclass
+class Episode:
+    observations: np.ndarray
+    actions: np.ndarray
+    rewards: np.ndarray
+    terminals: np.ndarray
+
+
+def split_by_terminal(observations, actions, rewards, terminals):
+    episodes = []
+    start_idx = 0
+
+    for i, terminal in enumerate(terminals):
+        if terminal:
+            episodes.append(Episode(
+                observations=observations[start_idx:i + 1],
+                actions=actions[start_idx:i + 1],
+                rewards=rewards[start_idx:i + 1],
+                terminals=terminals[start_idx:i + 1]
+            ))
+            start_idx = i + 1
+    return episodes
+
+
 def get_rl_dataset(current_trial_episodes, online_num_episodes):
     (observations, _, optimal_actions, rewards, terminals) = get_concatenated_user_episodes(current_trial_episodes)
 
-    rl_dataset = MDPDataset(observations=observations, actions=optimal_actions, rewards=rewards, terminals=terminals)
-
-    all_episodes = rl_dataset.episodes
+    all_episodes = split_by_terminal(observations, optimal_actions, rewards, terminals)
     if online_num_episodes is not None:
-        all_episodes = rl_dataset.episodes[:online_num_episodes]
+        all_episodes = all_episodes[:online_num_episodes]
 
-    num_classes = rl_dataset.episodes[0].action_signature.shape[0][0]
+    num_classes = optimal_actions.shape[1]
     return all_episodes, num_classes
 
 
@@ -379,21 +414,3 @@ class CombinedDataset(data.Dataset):
     def num_unique_labels(self):
         assert self.dataset1.labels.shape[1] == self.dataset2.labels.shape[1], 'labels of both datasets must match'
         return self.dataset1.labels.shape[1]
-
-
-class EMGWindowsAdaptationDataset(data.Dataset):
-    def __init__(self, windows, labels):
-        self.windows = torch.tensor(windows, dtype=torch.float32)
-        self.labels = torch.tensor(labels, dtype=torch.float32)
-
-    def __len__(self):
-        return len(self.windows)
-
-    def __getitem__(self, idx):
-        x_tensor = self.windows[idx, :, :]
-        y_tensor = self.labels[idx]
-        return x_tensor, y_tensor
-
-    @property
-    def num_unique_labels(self):
-        return self.labels.shape[1]
