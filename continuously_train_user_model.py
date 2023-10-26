@@ -39,14 +39,18 @@ def sweep_wrapper():
     main(pl_model, user_hash, config=None)
 
 
-def prepare_data(ep_idx, config, all_episodes):
-    if ep_idx >= config.online_first_training_episode and ep_idx % config.online_train_intervals == 0:
-        if ep_idx > 0:
-            rand_episode_idxs = torch.randint(0, ep_idx, size=(config.online_additional_train_episodes,)).unique()
-            train_episodes = [all_episodes[r_e_idx] for r_e_idx in rand_episode_idxs]
-            train_episodes.append(all_episodes[ep_idx])
-        else:
-            train_episodes = [all_episodes[ep_idx]]
+def prepare_data(ep_idx, config, all_episodes, per_label_accuracies):
+    train_episodes = []
+    if ep_idx > 0:
+        rand_episode_idxs = torch.randint(0, ep_idx, size=(config.online_additional_train_episodes,)).unique()
+        train_episodes += [all_episodes[r_e_idx] for r_e_idx in rand_episode_idxs]
+
+    if config.online_adaptive_training:
+        current_episode = datasets.get_adaptive_episode(all_episodes, per_label_accuracies)
+    else:
+        current_episode = all_episodes[ep_idx]
+
+    train_episodes.append(current_episode)
 
     train_observations = np.concatenate([e.observations for e in train_episodes])
     train_actions = np.concatenate([e.actions for e in train_episodes])
@@ -99,9 +103,11 @@ def main(pl_model: LightningModule, user_hash, config: configs.BaseConfig) -> Li
 
             hist = validate_model(trainer, pl_model, rollout, config)
             results.append(hist)
+            # TODO check if accuracy is calculated correctly, values differ a lot from F1
 
             if ep_idx >= config.online_first_training_episode and ep_idx % config.online_train_intervals == 0:
-                train_dataset = prepare_data(ep_idx, config, all_episodes)
+                per_label_accuracies = np.array([hist[f'val_acc_label_{label_idx}'] for label_idx in range(num_classes)])
+                train_dataset = prepare_data(ep_idx, config, all_episodes, per_label_accuracies)
                 replay_buffer.extend(train_dataset)
 
                 # TODO: figure out why train_model doesn't crash

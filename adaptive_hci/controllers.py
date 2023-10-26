@@ -123,7 +123,8 @@ class PLModel(pl.LightningModule):
         self.log('val_f1', val_f1, prog_bar=True)
 
         per_label_accuracies = self.get_per_label_accuracies(outputs, targets)
-        self.log('per_label_accuracies', per_label_accuracies, prog_bar=True)
+        for label_idx, per_label_acc in enumerate(per_label_accuracies):
+            self.log(f'val_acc_label_{label_idx}', per_label_acc, prog_bar=True)
 
         return val_loss, val_acc, val_f1, per_label_accuracies
 

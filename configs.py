@@ -44,6 +44,7 @@ class BaseConfig(BaseModel):
     online_train_intervals: int = 4
     online_first_training_episode: int = 0
     online_additional_train_episodes: int = 4
+    online_adaptive_training: bool = True
     hostname: str = ""
     # hostname: str = "mila"
     # hostname: str = "cc-cedar"
