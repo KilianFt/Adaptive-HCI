@@ -4,6 +4,7 @@ from torch import Tensor
 from torch.functional import F
 from stable_baselines3 import PPO
 from torchmetrics import ExactMatch, F1Score, Accuracy
+from torchmetrics import ExactMatch, F1Score, Accuracy
 from vit_pytorch import ViT
 import lightning.pytorch as pl
 
