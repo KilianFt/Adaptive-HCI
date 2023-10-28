@@ -66,7 +66,7 @@ def validate_model(trainer, pl_model, val_dataset, config):
 def train_model(trainer, pl_model, train_dataset, config):
     train_dataloader = DataLoader(train_dataset, batch_size=config.online_batch_size,
                                   num_workers=config.online_adaptation_num_workers, shuffle=True)
-    trainer.fit(model=pl_model, train_dataloaders=train_dataloader)
+    trainer.fit(model=pl_model, train_dataloaders=train_dataloader)  # TODO: we need to track metrics
 
 
 def process_session(config, current_trial_episodes, logger, pl_model, session_idx):

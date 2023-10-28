@@ -29,7 +29,6 @@ file_ids = [
 
 def main(model, user_hash, config: configs.BaseConfig):
     logger = WandbLogger(project='adaptive_hci', tags=["offline_adaptation", user_hash], config=config,
-
                          name=f"finetune_{config}_{user_hash[:15]}")
 
     online_data_dir = pathlib.Path('datasets/OnlineData')
@@ -42,7 +41,6 @@ def main(model, user_hash, config: configs.BaseConfig):
     wandb.run.log_artifact(artifact)
 
     episode_list = load_online_episodes(online_data_dir, episode_filenames, config.finetune_num_episodes)
-
 
     train_episodes = []
     for ep in episode_list[:-1]:
