@@ -1,6 +1,7 @@
 import copy
 import hashlib
 import os
+import sys
 
 import configs
 import train_general_model
@@ -15,7 +16,11 @@ train_users = [
 
 
 def main():
-    experiment_config = configs.SmokeConfig()
+    if sys.gettrace():
+        experiment_config = configs.SmokeConfig()
+    else:
+        experiment_config = configs.BaseConfig()
+
     entity = "delvermm" if "delverm" in os.getlogin() else "kilian"
     logger, experiment_config = buddy_setup(experiment_config, entity=entity)
 
@@ -26,5 +31,10 @@ def main():
         user_model = continuously_train_user_model.main(finetuned_user_model, user_hash, experiment_config)
 
 
+def fail_early():
+    configs.fail_early()
+
+
 if __name__ == '__main__':
+    fail_early()
     main()
