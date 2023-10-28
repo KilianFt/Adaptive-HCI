@@ -42,11 +42,8 @@ def get_episode_modes(episodes, n_samples_considered: int = 20):
 
 def find_closest_episode(episodes, target_row):
     ep_modes = get_episode_modes(episodes)
-
-    distances = np.linalg.norm(ep_modes - target_row, axis=1)
-    min_distance_indices = np.where(distances == distances.min())[0]
-    closest_row_index = random.choice(min_distance_indices)
-
+    distances = np.argmin(np.linalg.norm(ep_modes - target_row, axis=1))
+    closest_row_index = random.choice(distances)
     return episodes[closest_row_index]
 
 

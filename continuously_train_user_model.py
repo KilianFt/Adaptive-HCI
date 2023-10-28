@@ -44,7 +44,8 @@ def sweep_wrapper():
 
 def prepare_data(ep_idx, config, all_episodes, episode_metrics):
     if config.online_adaptive_training:
-        per_label_accuracies = np.array([episode_metrics[f'val_acc_label_{label_idx}'][-1] for label_idx in range(config.num_classes)])
+        per_label_accuracies = np.array(
+            [episode_metrics[f'val_acc_label_{label_idx}'][-1] for label_idx in range(config.num_classes)])
         current_episode = datasets.get_adaptive_episode(all_episodes, per_label_accuracies)
     else:
         current_episode = all_episodes[ep_idx]
