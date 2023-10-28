@@ -3,51 +3,48 @@
 '''
 Can plot EMG data in 2 different ways
 change DRAW_LINES to try each.
-Press Ctrl + C in the terminal to exit 
+Press Ctrl + C in the terminal to exit
 '''
+import multiprocessing
 import time
 from collections import deque
 
 import numpy as np
-import multiprocessing
 import torch
-from vit_pytorch import ViT
-from pyomyo import Myo, emg_mode
-
 from controllers import SLOnlyController
+from pyomyo import Myo, emg_mode
 
 device = 'mps'
 emg_min = -128
 emg_max = 127
 
-
 # ------------ Myo Setup ---------------
 q = multiprocessing.Queue()
 
+
 def worker(q):
-	m = Myo(mode=emg_mode.RAW)
-	m.connect()
-	
-	def add_to_queue(emg, movement):
-		q.put(emg)
+    m = Myo(mode=emg_mode.RAW)
+    m.connect()
 
-	m.add_emg_handler(add_to_queue)
-	
-	def print_battery(bat):
-		print("Battery level:", bat)
+    def add_to_queue(emg, movement):
+        q.put(emg)
 
-	m.add_battery_handler(print_battery)
+    m.add_emg_handler(add_to_queue)
 
-	 # Orange logo and bar LEDs
-	m.set_leds([128, 0, 0], [128, 0, 0])
-	# Vibrate to know we connected okay
-	m.vibrate(1)
-	
-	"""worker function"""
-	while True:
-		m.run()
-	print("Worker Stopped")
-    
+    def print_battery(bat):
+        print("Battery level:", bat)
+
+    m.add_battery_handler(print_battery)
+
+    # Orange logo and bar LEDs
+    m.set_leds([128, 0, 0], [128, 0, 0])
+    # Vibrate to know we connected okay
+    m.vibrate(1)
+
+    """worker function"""
+    while True:
+        m.run()
+    print("Worker Stopped")
 
 
 # -------- Main Program Loop -----------
@@ -58,12 +55,12 @@ if __name__ == "__main__":
     controller = SLOnlyController('models/pretrained_vit_onehot_mad.pt', device=device)
 
     move_map = {
-        0: 'Neutral', 
-        1: 'Radial Deviation', # up
-        2: 'Wrist Flexion', # left
-        3: 'Ulnar Deviation', # down
-        4: 'Wrist Extension', # right
-        }
+        0: 'Neutral',
+        1: 'Radial Deviation',  # up
+        2: 'Wrist Flexion',  # left
+        3: 'Ulnar Deviation',  # down
+        4: 'Wrist Extension',  # right
+    }
 
     emg_buffer = deque(maxlen=200)
     # initialize as -150 cause first window needs 200 samples
@@ -73,12 +70,12 @@ if __name__ == "__main__":
     try:
         while True:
             while n_new_samples < 50:
-                while not(q.empty()):
+                while not (q.empty()):
                     emg = list(q.get())
                     norm_emg = np.interp(emg, (emg_min, emg_max), (-1, +1))
                     emg_buffer.append(norm_emg)
                     n_new_samples += 1
-            
+
             # build new window every 50 new samples
             emg_window = np.array(emg_buffer, dtype=np.float32)
             emg_window = torch.tensor(emg_window).unsqueeze(0)
