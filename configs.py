@@ -33,11 +33,11 @@ class BaseConfig(BaseModel):
     random_seed: int = 100
     save_checkpoints: bool = False
     finetune_n_frozen_layers: int = 2
-    finetune_num_episodes: int = None
+    finetune_num_episodes: Optional[int] = None
     finetune_epochs: int = 50
     finetune_lr: float = 0.005
     finetune_batch_size: int = 32
-    online_num_episodes: int = None
+    online_num_episodes: Optional[int] = None
     online_batch_size: int = 16
     online_epochs: int = 9
     online_lr: float = 3.5e-3
@@ -103,3 +103,8 @@ class SmokeConfig(BaseConfig):
     online_adaptation_num_workers: int = 0
 
     limit_train_batches: int = 1
+
+
+def fail_early():
+    SmokeConfig()
+    BaseConfig()
