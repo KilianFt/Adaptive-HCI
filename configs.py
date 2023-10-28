@@ -72,7 +72,7 @@ class BaseConfig(BaseModel):
             self.proc_num = 4
 
     def __str__(self):
-        arg_str = pickle.dumps(self.model_dump())
+        arg_str = pickle.dumps(self.dict())
         self_hash = hashlib.sha256(arg_str).hexdigest()[:15]
         return f"{self.__class__.__name__}({self_hash})"
 
