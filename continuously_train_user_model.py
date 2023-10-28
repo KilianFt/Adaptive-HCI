@@ -1,25 +1,24 @@
-import os
-import copy
-import pathlib
-import hashlib
 import argparse
+import collections
+import hashlib
+import os
+import pathlib
+import random
 
-import wandb
-import torch
-import numpy as np
-from torch.utils.data import DataLoader
-from d3rlpy.datasets import MDPDataset
 import lightning.pytorch as pl
-from lightning.pytorch.loggers import WandbLogger
+import numpy as np
+import torch
+import wandb
 from lightning.pytorch import LightningModule
+from lightning.pytorch.loggers import WandbLogger
+from torch.utils.data import DataLoader
 
 import configs
+from adaptive_hci import datasets
 from adaptive_hci.controllers import PLModel
+from adaptive_hci.datasets import to_tensor_dataset
 from adaptive_hci.utils import maybe_download_drive_folder
-from adaptive_hci.datasets import EMGWindowsAdaptationDataset, \
-    get_concatenated_user_episodes, \
-    load_online_episodes
-
+from online_adaptation import replay_buffers
 
 file_ids = [
     "1-ZARLHsK1k958Bk2-mlQdrRblLreM8_j",
@@ -27,81 +26,91 @@ file_ids = [
     "1-hCAag7xc3_l7u8bHUfUNOTe0j95ZGrz",
 ]
 
-def main(finetuned_model: LightningModule, user_hash, config: configs.BaseConfig) -> LightningModule:
-    # load wandb config if sweep
-    if config is None:
-        config = wandb.config
 
-    logger = WandbLogger(project='adaptive_hci', tags=["online_adaptation", user_hash], config=config,
-                         name=f"online_adapt_{config}_{user_hash[:15]}")
-
-    pl_model = copy.deepcopy(finetuned_model)
-    pl_model.freeze_layers(config.online_n_frozen_layers)
-    pl_model.lr = config.online_lr
-
+def get_stored_sessions(config):
     online_data_dir = pathlib.Path('datasets/OnlineAdaptation')
     maybe_download_drive_folder(online_data_dir, file_ids=file_ids)
-
-    episode_filenames = sorted(os.listdir(online_data_dir))    
-    online_data = load_online_episodes(online_data_dir, episode_filenames)
-
-    # include other online data?
-    current_trial_episodes = online_data[0]
-
-    observations, actions, optimal_actions, rewards, terminals = get_concatenated_user_episodes(current_trial_episodes)
-    rl_dataset = MDPDataset(observations=observations, actions=optimal_actions, rewards=rewards, terminals=terminals)
-
-    if config.online_num_episodes is not None:
-        all_episodes = rl_dataset.episodes[:config.online_num_episodes]
-    else:
-        all_episodes = rl_dataset.episodes
-
-    # simulate online data replay
-    results = []
-    for ep_idx, episode in enumerate(all_episodes):
-        # Can we avoid reloading the trainer? problem is that max_epochs only works with calling fit once
-        trainer = pl.Trainer(limit_train_batches=config.limit_train_batches, max_epochs=config.online_epochs,
-                             log_every_n_steps=1, logger=logger)
-
-        val_dataset = EMGWindowsAdaptationDataset(episode.observations, episode.actions)
-        val_dataloader = DataLoader(
-            val_dataset, batch_size=config.online_batch_size, num_workers=config.online_adaptation_num_workers)
-
-        hist = trainer.validate(model=pl_model, dataloaders=val_dataloader)
-        results.append(hist[0])
-
-        # training
-        if ep_idx >= config.online_first_training_episode and ep_idx % config.online_train_intervals == 0:
-            # pick n random past episodes
-            if ep_idx > 0:
-                rand_episode_idxs = torch.randint(0, ep_idx, size=(config.online_additional_train_episodes,)).unique()
-                train_episodes = [all_episodes[r_e_idx] for r_e_idx in rand_episode_idxs]
-                train_episodes.append(episode)
-            else:
-                train_episodes = [episode]
-
-            train_observations = np.concatenate([e.observations for e in train_episodes])
-            train_actions = np.concatenate([e.actions for e in train_episodes])
-            train_dataset = EMGWindowsAdaptationDataset(train_observations, train_actions)
-            train_dataloader = DataLoader(train_dataset, batch_size=config.online_batch_size,
-                                          num_workers=config.online_adaptation_num_workers, shuffle=True)
-
-            trainer.fit(model=pl_model, train_dataloaders=train_dataloader)
-
-    wandb.run.log({
-        'mean_accuracy': np.mean([r['val_acc'] for r in results]),
-        'mean_f1': np.mean([r['val_f1'] for r in results]),
-    })
-    return pl_model
+    episode_filenames = sorted(os.listdir(online_data_dir))
+    online_sessions = datasets.load_online_episodes(online_data_dir, episode_filenames, config.online_num_sessions)
+    return online_sessions
 
 
 def sweep_wrapper():
     _ = wandb.init()
     pl_model = PLModel.load_from_checkpoint('./adaptive_hci/yp8k1lmf/checkpoints/epoch=0-step=100.ckpt')
     user_hash = hashlib.sha256("Kilian".encode("utf-8")).hexdigest()
-    main(finetuned_model=pl_model,
-         user_hash=user_hash,
-         config=None)
+    main(pl_model, user_hash, config=None)
+
+
+def prepare_data(ep_idx, config, all_episodes):
+    observations = [all_episodes[ep_idx].observations]
+    actions = [all_episodes[ep_idx].actions]
+    if ep_idx > 0:
+        num_samples = min(config.online_additional_train_episodes, len(all_episodes))
+        for e in random.sample(all_episodes, num_samples):
+            observations.append(e.observations)
+            actions.append(e.actions)
+
+    train_observations = np.concatenate(observations)
+    train_actions = np.concatenate(actions)
+    return to_tensor_dataset(train_observations, train_actions)
+
+
+def validate_model(trainer, pl_model, val_dataset, config):
+    val_dataloader = DataLoader(val_dataset, batch_size=config.online_batch_size,
+                                num_workers=config.online_adaptation_num_workers)
+    hist, = trainer.validate(model=pl_model, dataloaders=val_dataloader)
+    return hist
+
+
+def train_model(trainer, pl_model, train_dataset, config):
+    train_dataloader = DataLoader(train_dataset, batch_size=config.online_batch_size,
+                                  num_workers=config.online_adaptation_num_workers, shuffle=True)
+    trainer.fit(model=pl_model, train_dataloaders=train_dataloader)  # TODO: we need to track metrics
+
+
+def process_session(config, current_trial_episodes, logger, pl_model, session_idx):
+    all_episodes, num_classes = datasets.get_rl_dataset(current_trial_episodes, config.online_num_episodes)
+    episode_metrics = collections.defaultdict(list)
+    replay_buffer = replay_buffers.ReplayBuffer(max_size=1_000, num_classes=num_classes)
+    trainer = pl.Trainer(limit_train_batches=config.limit_train_batches, max_epochs=0, log_every_n_steps=1,
+                         logger=logger)
+    for ep_idx, rollout in enumerate(all_episodes):
+        trainer.fit_loop.max_epochs += config.online_epochs
+
+        val_dataset = to_tensor_dataset(rollout.observations, rollout.actions)
+        validation_metrics = validate_model(trainer, pl_model, val_dataset, config)
+
+        for k, v in validation_metrics.items():
+            episode_metrics[k].append(v)
+
+        if ep_idx >= config.online_first_training_episode and ep_idx % config.online_train_intervals == 0:
+            train_dataset = prepare_data(ep_idx, config, all_episodes)
+            replay_buffer.extend(train_dataset)
+
+            if len(replay_buffer) > 0:
+                train_model(trainer, pl_model, replay_buffer, config)
+
+        wandb.run.log({f'session_{session_idx}/{k}': v for k, v in episode_metrics.items()}, commit=False)
+
+
+def main(pl_model: LightningModule, user_hash, config: configs.BaseConfig) -> LightningModule:
+    if config is None:
+        config = wandb.config
+
+    pl_model.freeze_layers(config.online_n_frozen_layers)
+    pl_model.lr = config.online_lr
+
+    logger = WandbLogger(project='adaptive_hci', tags=["online_adaptation", user_hash],
+                         config=config, name=f"online_adapt_{config}_{user_hash[:15]}")
+
+    online_sessions = get_stored_sessions(config)
+
+    for session_idx, current_trial_episodes in enumerate(online_sessions):
+        process_session(config, current_trial_episodes, logger, pl_model, session_idx)
+
+    wandb.run.log({}, commit=True)
+    return pl_model
 
 
 if __name__ == '__main__':
@@ -111,7 +120,6 @@ if __name__ == '__main__':
 
     random_seed = 100
     torch.manual_seed(random_seed)
-
     pl_model = PLModel.load_from_checkpoint('./adaptive_hci/yp8k1lmf/checkpoints/epoch=0-step=100.ckpt')
     user_hash = hashlib.sha256("Kilian".encode("utf-8")).hexdigest()
 
@@ -138,6 +146,4 @@ if __name__ == '__main__':
         wandb.agent(sweep_id, function=sweep_wrapper, count=2)
     else:
         config = configs.SmokeConfig()
-        main(finetuned_model=pl_model,
-             user_hash=user_hash,
-             config=config)
+        main(pl_model, user_hash, config)
