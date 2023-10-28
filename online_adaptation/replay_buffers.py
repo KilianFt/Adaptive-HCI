@@ -29,7 +29,7 @@ class ReplayBuffer(Dataset):
     def __getitem__(self, sample_idx):
         # TODO: this is not ok, nor deterministic
         classes = list(self.buffers.keys())
-        classes.remove(0) # 0 is unused for now.
+        classes.remove(0)  # 0 is unused for now.
         class_idx = random.choice(classes)
         class_onehot = torch.zeros(self.num_classes)
         class_onehot[class_idx] = 1
@@ -42,7 +42,10 @@ class ReplayBuffer(Dataset):
 
 if __name__ == '__main__':
     buffer = ReplayBuffer(max_size=1000, num_classes=3)
-    for _ in range(500):
-        buffer.add(np.random.rand(5), random.randint(0, 2), random.random(), np.random.rand(5), False)
+    for i in range(1000):
+        buffer.add(torch.randn(5), torch.tensor([1, 0, 0]))
+        buffer.add(torch.randn(5), torch.tensor([0, 1, 0]))
+        buffer.add(torch.randn(5), torch.tensor([0, 0, 1]))
 
-    observations, actions, rewards, next_observations, dones = buffer.sample(32)
+    print(len(buffer))
+    print(buffer[0])
