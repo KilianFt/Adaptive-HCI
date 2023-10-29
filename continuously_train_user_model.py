@@ -44,7 +44,8 @@ def sweep_wrapper():
 
 def prepare_data(ep_idx, config, all_episodes, episode_metrics):
     if config.online_adaptive_training:
-        per_label_accuracies = np.array([episode_metrics[f'val_acc_label_{label_idx}'][-1] for label_idx in range(config.num_classes)])
+        per_label_accuracies = np.array(
+            [episode_metrics[f'val_acc_label_{label_idx}'][-1] for label_idx in range(config.num_classes)])
         current_episode = datasets.get_adaptive_episode(all_episodes, per_label_accuracies)
     else:
         current_episode = all_episodes[ep_idx]
@@ -72,7 +73,7 @@ def validate_model(trainer, pl_model, val_dataset, config):
 def train_model(trainer, pl_model, train_dataset, config):
     train_dataloader = DataLoader(train_dataset, batch_size=config.online_batch_size,
                                   num_workers=config.online_adaptation_num_workers, shuffle=True)
-    trainer.fit(model=pl_model, train_dataloaders=train_dataloader)
+    trainer.fit(model=pl_model, train_dataloaders=train_dataloader)  # TODO: we need to track metrics
 
 
 def process_session(config, current_trial_episodes, logger, pl_model, session_idx):
