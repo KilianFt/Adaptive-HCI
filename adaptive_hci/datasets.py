@@ -29,6 +29,37 @@ gesture_names = [
 ]
 
 
+def get_episode_modes(episodes, n_samples_considered: int = 20):
+    primary_actions = [extract_primary_action(ep.actions[:n_samples_considered]) for ep in episodes]
+    return primary_actions
+
+
+def extract_primary_action(actions):
+    unique_actions, counts = np.unique(actions, return_counts=True, axis=0)
+    primary_action = unique_actions[np.argmax(counts)]
+    return primary_action
+
+
+def find_closest_episode(episodes, target_row):
+    closest_row_index = np.argmin(calculate_action_distances(episodes, target_row))
+    return episodes[closest_row_index]
+
+
+def calculate_action_distances(episodes, target_row):
+    primary_actions = get_episode_modes(episodes)
+    distances = np.linalg.norm(primary_actions - target_row, axis=1)
+    return distances
+
+
+def get_adaptive_episode(episodes, label_accuracies):
+    # Find the episode with the worst label accuracy and retrieve the closest episode based on actions
+    worst_label_index = np.argmin(label_accuracies)
+    worst_label = np.zeros_like(label_accuracies)
+    worst_label[worst_label_index] = 1.0
+    closest_episode = find_closest_episode(episodes, worst_label)
+    return closest_episode
+
+
 def to_tensor_dataset(train_observations, train_actions):
     ds = TensorDataset(
         torch.tensor(train_observations, dtype=torch.float32),
