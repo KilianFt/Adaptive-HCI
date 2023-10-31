@@ -53,7 +53,7 @@ class PLModel(pl.LightningModule):
         self.log("train/loss", loss)
         return loss
 
-    def get_per_label_accuracies(self, outputs, targets, threshold = 0.5):
+    def get_per_label_accuracies(self, outputs, targets, threshold=0.5):
         num_targets = targets.shape[1]
 
         binary_outputs = (outputs >= threshold).int()
@@ -62,7 +62,7 @@ class PLModel(pl.LightningModule):
         per_labels_accuracies = []
 
         for label_idx in range(num_targets):
-            label_acc = self.accuracy_metric(binary_outputs[:,label_idx], binary_targets[:,label_idx])
+            label_acc = self.accuracy_metric(binary_outputs[:, label_idx], binary_targets[:, label_idx])
             per_labels_accuracies.append(label_acc)
 
         return torch.tensor(per_labels_accuracies)
