@@ -1,8 +1,6 @@
-import abc
 import lightning.pytorch as pl
 import torch
 from torch.functional import F
-from stable_baselines3 import PPO
 from torchmetrics import ExactMatch, F1Score, Accuracy
 from vit_pytorch import ViT
 
@@ -22,6 +20,7 @@ class PLModel(pl.LightningModule):
         self.save_hyperparameters(ignore=['model'])
         self.model = model
         self.lr = lr
+        self.threshold = threshold
         self.criterion = torch.nn.MSELoss()
         self.exact_match = ExactMatch(task="multilabel", num_labels=n_labels, threshold=threshold)
         self.f1_score = F1Score(task="multilabel", num_labels=n_labels, threshold=threshold)
@@ -53,11 +52,11 @@ class PLModel(pl.LightningModule):
         self.log("train/loss", loss)
         return loss
 
-    def get_per_label_accuracies(self, outputs, targets, threshold=0.5):
+    def get_per_label_accuracies(self, outputs, targets):
         num_targets = targets.shape[1]
 
-        binary_outputs = (outputs >= threshold).int()
-        binary_targets = (targets >= threshold).int()
+        binary_outputs = (outputs >= self.threshold).int()
+        binary_targets = (targets >= self.threshold).int()
 
         per_labels_accuracies = []
 

@@ -77,7 +77,7 @@ def main(logger, experiment_config: configs.BaseConfig) -> nn.Module:
 
     assert experiment_config.loss in ["MSELoss"], "Only MSELoss is supported for now"
 
-    pl_model = PLModel(vit, n_labels=n_labels, n_frozen_layers=0, threshold=0.5, lr=1e-3)
+    pl_model = PLModel(vit, n_labels=n_labels, lr=experiment_config.lr, n_frozen_layers=0, threshold=0.5)
     trainer = pl.Trainer(limit_train_batches=experiment_config.limit_train_batches,
                          max_epochs=experiment_config.pretraining_epochs, log_every_n_steps=1, logger=pl_logger, )
     trainer.fit(model=pl_model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
