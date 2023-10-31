@@ -6,18 +6,12 @@ import lightning.pytorch as pl
 import torch
 import wandb
 from lightning.pytorch.loggers import WandbLogger
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader
 
 import configs
 from adaptive_hci.datasets import get_concatenated_user_episodes, load_online_episodes, to_tensor_dataset
 from adaptive_hci.utils import maybe_download_drive_folder
 
-base_configuration = {
-    'finetune_batch_size': 32,
-    'finetune_epochs': 50,
-    'finetune_lr': 0.005,
-    'finetune_n_frozen_layers': 2,
-}
 
 file_ids = [
     "1Sitb0ooo2izvkHQGNQkXTGoDV4CJAnFF",
@@ -98,7 +92,8 @@ if __name__ == '__main__':
     }
 
     if sys.gettrace() is not None:
-        main(base_configuration)
+        raise NotImplementedError
     else:
+        raise NotImplementedError
         sweep_id = wandb.sweep(sweep=sweep_configuration, project="adaptive-hci-offline-adaptation")
         wandb.agent(sweep_id, function=main, count=10)
