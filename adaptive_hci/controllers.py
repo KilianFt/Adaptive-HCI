@@ -24,8 +24,10 @@ class PLModel(pl.LightningModule):
         self.criterion = torch.nn.MSELoss()
         self.exact_match = ExactMatch(task="multilabel", num_labels=n_labels, threshold=threshold)
         self.f1_score = F1Score(task="multilabel", num_labels=n_labels, threshold=threshold)
-        self.freeze_layers(n_frozen_layers)
         self.accuracy_metric = Accuracy(task='binary')
+
+        if n_frozen_layers is not None:
+            self.freeze_layers(n_frozen_layers)
 
     def freeze_layers(self, n_frozen_layers: int) -> None:
         # reset grad
