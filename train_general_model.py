@@ -3,6 +3,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, random_split
 import lightning.pytorch as pl
 from lightning.pytorch.loggers import WandbLogger
+from lightning.pytorch import LightningModule
 
 import configs
 from adaptive_hci import utils
@@ -56,7 +57,7 @@ def get_dataset(config: configs.BaseConfig):
     return dataset
 
 
-def main(logger, experiment_config: configs.BaseConfig) -> nn.Module:
+def main(logger, experiment_config: configs.BaseConfig) -> tuple[LightningModule, torch.Tensor]:
     # TODO can we just ignore other logger?
     pl_logger = WandbLogger()
 
@@ -78,13 +79,18 @@ def main(logger, experiment_config: configs.BaseConfig) -> nn.Module:
     assert experiment_config.loss in ["MSELoss"], "Only MSELoss is supported for now"
 
     pl_model = PLModel(vit, n_labels=n_labels, lr=experiment_config.pretrain.lr, n_frozen_layers=0, threshold=0.5)
-    trainer = pl.Trainer(max_epochs=experiment_config.pretrain.epochs, log_every_n_steps=1, logger=pl_logger)
+    trainer = pl.Trainer(max_epochs=experiment_config.pretrain.epochs, log_every_n_steps=1, logger=pl_logger,
+                         enable_checkpointing=experiment_config.save_checkpoints)
     trainer.fit(model=pl_model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 
-    return pl_model
+    val_metrics = trainer.callback_metrics
+    logger.log({f'pretrain/{k}': v for k, v in val_metrics.items()}, commit=False)
+    score = val_metrics['validation/f1']
+
+    return pl_model, score
 
 
 if __name__ == '__main__':
     smoke_config = configs.SmokeConfig()
     torch.manual_seed(smoke_config.random_seed)
-    main(smoke_config)
+    main(None, smoke_config)
