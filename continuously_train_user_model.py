@@ -65,14 +65,14 @@ def prepare_data(ep_idx, config, all_episodes, episode_metrics):
 
 def validate_model(trainer, pl_model, val_dataset, config):
     val_dataloader = DataLoader(val_dataset, batch_size=config.online.batch_size,
-                                num_workers=config.online.adaptation_num_workers)
+                                num_workers=config.num_workers)
     hist, = trainer.validate(model=pl_model, dataloaders=val_dataloader)
     return hist
 
 
 def train_model(trainer, pl_model, train_dataset, config):
     train_dataloader = DataLoader(train_dataset, batch_size=config.online.batch_size,
-                                  num_workers=config.online.adaptation_num_workers, shuffle=True)
+                                  num_workers=config.num_workers, shuffle=True)
     trainer.fit(model=pl_model, train_dataloaders=train_dataloader)  # TODO: we need to track metrics
 
 
@@ -80,7 +80,8 @@ def process_session(config, current_trial_episodes, logger, pl_model, session_id
     all_episodes, num_classes = datasets.get_rl_dataset(current_trial_episodes, config.online.num_episodes)
     episode_metrics = collections.defaultdict(list)
     replay_buffer = replay_buffers.ReplayBuffer(max_size=1_000, num_classes=num_classes)
-    trainer = pl.Trainer(max_epochs=0, log_every_n_steps=1, logger=logger)
+    trainer = pl.Trainer(max_epochs=0, log_every_n_steps=1, logger=logger,
+                         enable_checkpointing=config.save_checkpoints)
     for ep_idx, rollout in enumerate(all_episodes):
         trainer.fit_loop.max_epochs += config.online.epochs
 
@@ -99,8 +100,9 @@ def process_session(config, current_trial_episodes, logger, pl_model, session_id
 
         wandb.run.log({f'session_{session_idx}/{k}': v for k, v in episode_metrics.items()}, commit=False)
 
+    return episode_metrics
 
-def main(pl_model: LightningModule, user_hash, config: configs.BaseConfig) -> LightningModule:
+def main(pl_model: LightningModule, user_hash, config: configs.BaseConfig) -> tuple[LightningModule, torch.Tensor]:
     if config is None:
         config = wandb.config
 
@@ -112,11 +114,21 @@ def main(pl_model: LightningModule, user_hash, config: configs.BaseConfig) -> Li
 
     online_sessions = get_stored_sessions(config)
 
+    session_metrics_list = []
     for session_idx, current_trial_episodes in enumerate(online_sessions):
-        process_session(config, current_trial_episodes, logger, pl_model, session_idx)
+        episode_metrics = process_session(config, current_trial_episodes, logger, pl_model, session_idx)
+        session_metrics_list.append(episode_metrics)
 
-    wandb.run.log({}, commit=True)
-    return pl_model
+    mean_metrics = {}
+    if len(session_metrics_list) > 1:
+        for key in session_metrics_list[0].keys():
+            mean_metrics[f"continuous/{key}"] = np.mean([metric[key] for metric in session_metrics_list])
+
+    print(mean_metrics)
+    wandb.run.log(mean_metrics, commit=True)
+    score = mean_metrics['continuous/validation/f1']
+
+    return pl_model, score
 
 
 if __name__ == '__main__':

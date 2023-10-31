@@ -20,7 +20,6 @@ class FinetuneConfig(BaseModel):
     epochs: int = 50
     lr: float = 0.005
     batch_size: int = 32
-    num_workers: int = 8
 
 class OnlineConfig(BaseModel):
     num_episodes: Optional[int] = None
@@ -33,7 +32,6 @@ class OnlineConfig(BaseModel):
     first_training_episode: int = 0
     additional_train_episodes: int = 4
     adaptive_training: bool = True
-    adaptation_num_workers: int = 8
 
 class ViTConfig(BaseModel):
     base_model_class: str = 'ViT'
@@ -54,6 +52,7 @@ class BaseConfig(BaseModel):
     num_classes: int = 5
     random_seed: int = 100
     save_checkpoints: bool = False
+    num_workers: int = 8
 
     base_model_config: ViTConfig = ViTConfig()
     pretrain: PretrainConfig = PretrainConfig()

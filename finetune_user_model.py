@@ -6,6 +6,7 @@ import lightning.pytorch as pl
 import torch
 import wandb
 from lightning.pytorch.loggers import WandbLogger
+from lightning.pytorch import LightningModule
 from torch.utils.data import DataLoader
 
 import configs
@@ -21,7 +22,7 @@ file_ids = [
 ]
 
 
-def main(model, user_hash, config: configs.BaseConfig):
+def main(model: LightningModule, user_hash, config: configs.BaseConfig) -> tuple[LightningModule, torch.Tensor]:
     logger = WandbLogger(project='adaptive_hci', tags=["offline_adaptation", user_hash], config=config,
                          name=f"finetune_{config}_{user_hash[:15]}")
 
@@ -60,7 +61,7 @@ def main(model, user_hash, config: configs.BaseConfig):
     train_offline_adaption_dataset = to_tensor_dataset(train_observations, train_optimal_actions)
     val_offline_adaption_dataset = to_tensor_dataset(val_observations, val_optimal_actions)
 
-    dataloader_args = dict(batch_size=config.finetune.batch_size, num_workers=config.finetune.num_workers)
+    dataloader_args = dict(batch_size=config.finetune.batch_size, num_workers=config.num_workers)
 
     train_dataloader = DataLoader(train_offline_adaption_dataset, shuffle=True, **dataloader_args)
     val_dataloader = DataLoader(val_offline_adaption_dataset, **dataloader_args)
@@ -68,10 +69,15 @@ def main(model, user_hash, config: configs.BaseConfig):
     model.lr = config.finetune.lr
     model.freeze_layers(config.finetune.n_frozen_layers)
 
-    trainer = pl.Trainer(max_epochs=config.finetune.epochs, log_every_n_steps=1, logger=logger)
+    trainer = pl.Trainer(max_epochs=config.finetune.epochs, log_every_n_steps=1, logger=logger,
+                         enable_checkpointing=config.save_checkpoints)
 
     trainer.fit(model=model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
-    return model
+
+    val_metrics = trainer.callback_metrics
+    wandb.run.log({f'finetune/{k}': v for k, v in val_metrics.items()}, commit=False)
+    score = val_metrics['validation/f1']
+    return model, score
 
 
 if __name__ == '__main__':
