@@ -31,7 +31,7 @@ def get_stored_sessions(config):
     online_data_dir = pathlib.Path('datasets/OnlineAdaptation')
     maybe_download_drive_folder(online_data_dir, file_ids=file_ids)
     episode_filenames = sorted(os.listdir(online_data_dir))
-    online_sessions = datasets.load_online_episodes(online_data_dir, episode_filenames, config.online_num_sessions)
+    online_sessions = datasets.load_online_episodes(online_data_dir, episode_filenames, config.online.num_sessions)
     return online_sessions
 
 
@@ -43,7 +43,7 @@ def sweep_wrapper():
 
 
 def prepare_data(ep_idx, config, all_episodes, episode_metrics):
-    if config.online_adaptive_training:
+    if config.online.adaptive_training:
         per_label_accuracies = np.array(
             [episode_metrics[f'validation/acc_label_{label_idx}'][-1] for label_idx in range(config.num_classes)])
         current_episode = datasets.get_adaptive_episode(all_episodes, per_label_accuracies)
@@ -53,7 +53,7 @@ def prepare_data(ep_idx, config, all_episodes, episode_metrics):
     observations = [current_episode.observations]
     actions = [current_episode.actions]
     if ep_idx > 0:
-        num_samples = min(config.online_additional_train_episodes, len(all_episodes))
+        num_samples = min(config.online.additional_train_episodes, len(all_episodes))
         for e in random.sample(all_episodes, num_samples):
             observations.append(e.observations)
             actions.append(e.actions)
@@ -64,26 +64,25 @@ def prepare_data(ep_idx, config, all_episodes, episode_metrics):
 
 
 def validate_model(trainer, pl_model, val_dataset, config):
-    val_dataloader = DataLoader(val_dataset, batch_size=config.online_batch_size,
-                                num_workers=config.online_adaptation_num_workers)
+    val_dataloader = DataLoader(val_dataset, batch_size=config.online.batch_size,
+                                num_workers=config.online.adaptation_num_workers)
     hist, = trainer.validate(model=pl_model, dataloaders=val_dataloader)
     return hist
 
 
 def train_model(trainer, pl_model, train_dataset, config):
-    train_dataloader = DataLoader(train_dataset, batch_size=config.online_batch_size,
-                                  num_workers=config.online_adaptation_num_workers, shuffle=True)
+    train_dataloader = DataLoader(train_dataset, batch_size=config.online.batch_size,
+                                  num_workers=config.online.adaptation_num_workers, shuffle=True)
     trainer.fit(model=pl_model, train_dataloaders=train_dataloader)  # TODO: we need to track metrics
 
 
 def process_session(config, current_trial_episodes, logger, pl_model, session_idx):
-    all_episodes, num_classes = datasets.get_rl_dataset(current_trial_episodes, config.online_num_episodes)
+    all_episodes, num_classes = datasets.get_rl_dataset(current_trial_episodes, config.online.num_episodes)
     episode_metrics = collections.defaultdict(list)
     replay_buffer = replay_buffers.ReplayBuffer(max_size=1_000, num_classes=num_classes)
-    trainer = pl.Trainer(limit_train_batches=config.limit_train_batches, max_epochs=0, log_every_n_steps=1,
-                         logger=logger)
+    trainer = pl.Trainer(max_epochs=0, log_every_n_steps=1, logger=logger)
     for ep_idx, rollout in enumerate(all_episodes):
-        trainer.fit_loop.max_epochs += config.online_epochs
+        trainer.fit_loop.max_epochs += config.online.epochs
 
         val_dataset = to_tensor_dataset(rollout.observations, rollout.actions)
         validation_metrics = validate_model(trainer, pl_model, val_dataset, config)
@@ -91,7 +90,7 @@ def process_session(config, current_trial_episodes, logger, pl_model, session_id
         for k, v in validation_metrics.items():
             episode_metrics[k].append(v)
 
-        if ep_idx >= config.online_first_training_episode and ep_idx % config.online_train_intervals == 0:
+        if ep_idx >= config.online.first_training_episode and ep_idx % config.online.train_intervals == 0:
             train_dataset = prepare_data(ep_idx, config, all_episodes, episode_metrics)
             replay_buffer.extend(train_dataset)
 
@@ -105,8 +104,8 @@ def main(pl_model: LightningModule, user_hash, config: configs.BaseConfig) -> Li
     if config is None:
         config = wandb.config
 
-    pl_model.freeze_layers(config.online_n_frozen_layers)
-    pl_model.lr = config.online_lr
+    pl_model.freeze_layers(config.online.n_frozen_layers)
+    pl_model.lr = config.online.lr
 
     logger = WandbLogger(project='adaptive_hci', tags=["online_adaptation", user_hash],
                          config=config, name=f"online_adapt_{config}_{user_hash[:15]}")
