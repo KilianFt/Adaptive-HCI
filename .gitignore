@@ -14,5 +14,5 @@ lightning_logs/
 *.pyc
 *.DS_STORE
 *.ckpt
-
+test.ipynb
 /runs/
