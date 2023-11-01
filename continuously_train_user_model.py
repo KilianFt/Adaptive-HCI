@@ -65,14 +65,14 @@ def prepare_data(ep_idx, config, all_episodes, episode_metrics):
 
 def validate_model(trainer, pl_model, val_dataset, config):
     val_dataloader = DataLoader(val_dataset, batch_size=config.online.batch_size,
-                                num_workers=config.online.adaptation_num_workers)
+                                num_workers=config.online.num_workers)
     hist, = trainer.validate(model=pl_model, dataloaders=val_dataloader)
     return hist
 
 
 def train_model(trainer, pl_model, train_dataset, config):
     train_dataloader = DataLoader(train_dataset, batch_size=config.online.batch_size,
-                                  num_workers=config.online.adaptation_num_workers, shuffle=True)
+                                  num_workers=config.online.num_workers, shuffle=True)
     trainer.fit(model=pl_model, train_dataloaders=train_dataloader)  # TODO: we need to track metrics
 
 

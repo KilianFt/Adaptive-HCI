@@ -20,7 +20,6 @@ def main():
         experiment_config = configs.SmokeConfig()
     else:
         experiment_config = configs.BaseConfig()
-    experiment_config = configs.SmokeConfig()
 
     entity = "delvermm" if "delverm" in os.getlogin() else "kilian"
     logger, experiment_config = buddy_setup(experiment_config, entity=entity)

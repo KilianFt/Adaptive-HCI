@@ -13,6 +13,8 @@ class PretrainConfig(BaseModel):
     epochs: int = 40
     batch_size: int = 32
     lr: float = 0.0007
+    train_fraction: float = Field(0.8, description="80% of the data for training")
+    num_workers: int = 8
 
 class FinetuneConfig(BaseModel):
     n_frozen_layers: int = 2
@@ -33,7 +35,7 @@ class OnlineConfig(BaseModel):
     first_training_episode: int = 0
     additional_train_episodes: int = 4
     adaptive_training: bool = True
-    adaptation_num_workers: int = 8
+    num_workers: int = 8
 
 class ViTConfig(BaseModel):
     base_model_class: str = 'ViT'
@@ -67,7 +69,6 @@ class BaseConfig(BaseModel):
     sweep_config: str = ""
     proc_num: int = 1
     loss: str = "MSELoss"
-    train_fraction: float = Field(0.8, description="80% of the data for training")
 
     class Config:
         validate_assignment = True

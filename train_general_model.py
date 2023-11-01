@@ -14,9 +14,9 @@ from common import DataSourceEnum
 def get_dataset_(config: configs.BaseConfig):
     dataset = get_dataset(config)
 
-    train_dataset, test_dataset = random_split(dataset, [1 - config.train_fraction, config.train_fraction])
+    train_dataset, test_dataset = random_split(dataset, [1 - config.pretrain.train_fraction, config.pretrain.train_fraction])
 
-    dataloader_args = dict(batch_size=config.pretrain.batch_size, drop_last=False, num_workers=8)
+    dataloader_args = dict(batch_size=config.pretrain.batch_size, drop_last=False, num_workers=config.pretrain.num_workers)
 
     train_dataloader = DataLoader(train_dataset, shuffle=True, **dataloader_args)
     test_dataloader = DataLoader(test_dataset, **dataloader_args)
