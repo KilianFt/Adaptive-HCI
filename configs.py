@@ -56,6 +56,7 @@ class BaseConfig(BaseModel):
     num_classes: int = 5
     random_seed: int = 100
     save_checkpoints: bool = False
+    num_workers: int = 8
 
     base_model_config: ViTConfig = ViTConfig()
     pretrain: PretrainConfig = PretrainConfig()
