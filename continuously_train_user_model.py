@@ -89,6 +89,7 @@ def process_session(config, current_trial_episodes, logger, pl_model, session_id
     replay_buffer = replay_buffers.ReplayBuffer(max_size=1_000, num_classes=num_classes)
     trainer = pl.Trainer(max_epochs=0, log_every_n_steps=1, logger=logger,
                          enable_checkpointing=config.save_checkpoints)
+
     for ep_idx, rollout in enumerate(all_episodes):
         trainer.fit_loop.max_epochs += config.online.epochs
 
