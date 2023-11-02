@@ -1,5 +1,4 @@
 import torch
-import torch.nn as nn
 from torch.utils.data import DataLoader, random_split
 import lightning.pytorch as pl
 from lightning.pytorch.loggers import WandbLogger
@@ -57,8 +56,7 @@ def get_dataset(config: configs.BaseConfig):
     return dataset
 
 
-def main(logger, experiment_config: configs.BaseConfig) -> tuple[LightningModule, torch.Tensor]:
-    # TODO can we just ignore other logger?
+def main(logger, experiment_config: configs.BaseConfig) -> LightningModule:
     pl_logger = WandbLogger()
 
     train_dataloader, val_dataloader, n_labels = get_dataset_(experiment_config)
@@ -78,16 +76,12 @@ def main(logger, experiment_config: configs.BaseConfig) -> tuple[LightningModule
 
     assert experiment_config.loss in ["MSELoss"], "Only MSELoss is supported for now"
 
-    pl_model = PLModel(vit, n_labels=n_labels, lr=experiment_config.pretrain.lr, n_frozen_layers=0, threshold=0.5)
+    pl_model = PLModel(vit, n_labels=n_labels, lr=experiment_config.pretrain.lr, n_frozen_layers=0, threshold=0.5, metric_prefix='pretrain/')
     trainer = pl.Trainer(max_epochs=experiment_config.pretrain.epochs, log_every_n_steps=1, logger=pl_logger,
                          enable_checkpointing=experiment_config.save_checkpoints)
     trainer.fit(model=pl_model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 
-    val_metrics = trainer.callback_metrics
-    logger.log({f'pretrain/{k}': v for k, v in val_metrics.items()}, commit=False)
-    score = val_metrics['validation/f1']
-
-    return pl_model, score
+    return pl_model
 
 
 if __name__ == '__main__':

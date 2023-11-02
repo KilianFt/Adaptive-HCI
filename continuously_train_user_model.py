@@ -2,6 +2,7 @@ import argparse
 import collections
 import hashlib
 import os
+import re
 import pathlib
 import random
 
@@ -42,10 +43,17 @@ def sweep_wrapper():
     main(pl_model, user_hash, config=None)
 
 
+def extract_per_label_accuracies(episode_metrics):
+    pattern = re.compile(r'.*validation/acc_label_(\d+)')
+    matching_keys = [key for key in episode_metrics.keys() if pattern.match(key)]
+    sorted_keys = sorted(matching_keys, key=lambda key: int(pattern.search(key).group(1)))
+    per_label_accuracies = np.array([episode_metrics[key] for key in sorted_keys])
+    return per_label_accuracies
+
+
 def prepare_data(ep_idx, config, all_episodes, episode_metrics):
     if config.online.adaptive_training:
-        per_label_accuracies = np.array(
-            [episode_metrics[f'validation/acc_label_{label_idx}'][-1] for label_idx in range(config.num_classes)])
+        per_label_accuracies = extract_per_label_accuracies(episode_metrics)
         current_episode = datasets.get_adaptive_episode(all_episodes, per_label_accuracies)
     else:
         current_episode = all_episodes[ep_idx]
@@ -73,12 +81,11 @@ def validate_model(trainer, pl_model, val_dataset, config):
 def train_model(trainer, pl_model, train_dataset, config):
     train_dataloader = DataLoader(train_dataset, batch_size=config.online.batch_size,
                                   num_workers=config.online.num_workers, shuffle=True)
-    trainer.fit(model=pl_model, train_dataloaders=train_dataloader)  # TODO: we need to track metrics
+    trainer.fit(model=pl_model, train_dataloaders=train_dataloader)
 
 
 def process_session(config, current_trial_episodes, logger, pl_model, session_idx):
     all_episodes, num_classes = datasets.get_rl_dataset(current_trial_episodes, config.online.num_episodes)
-    episode_metrics = collections.defaultdict(list)
     replay_buffer = replay_buffers.ReplayBuffer(max_size=1_000, num_classes=num_classes)
     trainer = pl.Trainer(max_epochs=0, log_every_n_steps=1, logger=logger,
                          enable_checkpointing=config.save_checkpoints)
@@ -88,21 +95,15 @@ def process_session(config, current_trial_episodes, logger, pl_model, session_id
         val_dataset = to_tensor_dataset(rollout.observations, rollout.actions)
         validation_metrics = validate_model(trainer, pl_model, val_dataset, config)
 
-        for k, v in validation_metrics.items():
-            episode_metrics[k].append(v)
-
         if ep_idx >= config.online.first_training_episode and ep_idx % config.online.train_intervals == 0:
-            train_dataset = prepare_data(ep_idx, config, all_episodes, episode_metrics)
+            train_dataset = prepare_data(ep_idx, config, all_episodes, validation_metrics)
             replay_buffer.extend(train_dataset)
 
             if len(replay_buffer) > 0:
                 train_model(trainer, pl_model, replay_buffer, config)
 
-        wandb.run.log({f'session_{session_idx}/{k}': v for k, v in episode_metrics.items()}, commit=False)
 
-    return episode_metrics
-
-def main(pl_model: LightningModule, user_hash, config: configs.BaseConfig) -> tuple[LightningModule, torch.Tensor]:
+def main(pl_model: LightningModule, user_hash, config: configs.BaseConfig) -> LightningModule:
     if config is None:
         config = wandb.config
 
@@ -114,21 +115,12 @@ def main(pl_model: LightningModule, user_hash, config: configs.BaseConfig) -> tu
 
     online_sessions = get_stored_sessions(config)
 
-    session_metrics_list = []
     for session_idx, current_trial_episodes in enumerate(online_sessions):
-        episode_metrics = process_session(config, current_trial_episodes, logger, pl_model, session_idx)
-        session_metrics_list.append(episode_metrics)
+        pl_model.metric_prefix = f'{user_hash}/continous/session_{session_idx}/'
+        process_session(config, current_trial_episodes, logger, pl_model, session_idx)
 
-    mean_metrics = {}
-    if len(session_metrics_list) > 1:
-        for key in session_metrics_list[0].keys():
-            mean_metrics[f"continuous/{key}"] = np.mean([metric[key] for metric in session_metrics_list])
-
-    print(mean_metrics)
-    wandb.run.log(mean_metrics, commit=True)
-    score = mean_metrics['continuous/validation/f1']
-
-    return pl_model, score
+    wandb.run.log({}, commit=True)
+    return pl_model
 
 
 if __name__ == '__main__':

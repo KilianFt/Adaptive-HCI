@@ -22,8 +22,8 @@ file_ids = [
 ]
 
 
-def main(model: LightningModule, user_hash, config: configs.BaseConfig) -> tuple[LightningModule, torch.Tensor]:
-    logger = WandbLogger(project='adaptive_hci', tags=["offline_adaptation", user_hash], config=config,
+def main(model: LightningModule, user_hash, config: configs.BaseConfig) -> LightningModule:
+    logger = WandbLogger(project='adaptive_hci', tags=["finetune", user_hash], config=config,
                          name=f"finetune_{config}_{user_hash[:15]}")
 
     online_data_dir = pathlib.Path('datasets/OnlineData')
@@ -61,23 +61,21 @@ def main(model: LightningModule, user_hash, config: configs.BaseConfig) -> tuple
     train_offline_adaption_dataset = to_tensor_dataset(train_observations, train_optimal_actions)
     val_offline_adaption_dataset = to_tensor_dataset(val_observations, val_optimal_actions)
 
-    dataloader_args = dict(batch_size=config.finetune.batch_size, num_workers=config.num_workers)
+    dataloader_args = dict(batch_size=config.finetune.batch_size, num_workers=config.finetune.num_workers)
 
     train_dataloader = DataLoader(train_offline_adaption_dataset, shuffle=True, **dataloader_args)
     val_dataloader = DataLoader(val_offline_adaption_dataset, **dataloader_args)
 
     model.lr = config.finetune.lr
     model.freeze_layers(config.finetune.n_frozen_layers)
+    model.metric_prefix = f'{user_hash}/finetune/'
 
     trainer = pl.Trainer(max_epochs=config.finetune.epochs, log_every_n_steps=1, logger=logger,
                          enable_checkpointing=config.save_checkpoints)
 
     trainer.fit(model=model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 
-    val_metrics = trainer.callback_metrics
-    wandb.run.log({f'finetune/{k}': v for k, v in val_metrics.items()}, commit=False)
-    score = val_metrics['validation/f1']
-    return model, score
+    return model
 
 
 if __name__ == '__main__':
