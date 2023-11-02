@@ -14,9 +14,9 @@ from common import DataSourceEnum
 def get_dataset_(config: configs.BaseConfig):
     dataset = get_dataset(config)
 
-    train_dataset, test_dataset = random_split(dataset, [1 - config.train_fraction, config.train_fraction])
+    train_dataset, test_dataset = random_split(dataset, [1 - config.pretrain.train_fraction, config.pretrain.train_fraction])
 
-    dataloader_args = dict(batch_size=config.batch_size, drop_last=False, num_workers=8)
+    dataloader_args = dict(batch_size=config.pretrain.batch_size, drop_last=False, num_workers=config.pretrain.num_workers)
 
     train_dataloader = DataLoader(train_dataset, shuffle=True, **dataloader_args)
     test_dataloader = DataLoader(test_dataset, **dataloader_args)
@@ -64,28 +64,22 @@ def main(logger, experiment_config: configs.BaseConfig) -> nn.Module:
 
     vit = EMGViT(
         image_size=experiment_config.window_size,
-        patch_size=experiment_config.patch_size,
+        patch_size=experiment_config.base_model_config.patch_size,
         num_classes=n_labels,
-        dim=experiment_config.dim,
-        depth=experiment_config.depth,
-        heads=experiment_config.heads,
-        mlp_dim=experiment_config.mlp_dim,
-        dropout=experiment_config.dropout,
-        emb_dropout=experiment_config.emb_dropout,
-        channels=experiment_config.channels,
+        dim=experiment_config.base_model_config.dim,
+        depth=experiment_config.base_model_config.depth,
+        heads=experiment_config.base_model_config.heads,
+        mlp_dim=experiment_config.base_model_config.mlp_dim,
+        dropout=experiment_config.base_model_config.dropout,
+        emb_dropout=experiment_config.base_model_config.emb_dropout,
+        channels=experiment_config.base_model_config.channels,
     )
 
     assert experiment_config.loss in ["MSELoss"], "Only MSELoss is supported for now"
 
-    pl_model = PLModel(vit, n_labels=n_labels, lr=experiment_config.lr, n_frozen_layers=0, threshold=0.5)
-    trainer = pl.Trainer(limit_train_batches=experiment_config.limit_train_batches,
-                         max_epochs=experiment_config.pretraining_epochs, log_every_n_steps=1, logger=pl_logger, )
+    pl_model = PLModel(vit, n_labels=n_labels, lr=experiment_config.pretrain.lr, n_frozen_layers=0, threshold=0.5)
+    trainer = pl.Trainer(max_epochs=experiment_config.pretrain.epochs, log_every_n_steps=1, logger=pl_logger)
     trainer.fit(model=pl_model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
-
-    # if experiment_config.save_checkpoints:
-    #     model_save_path = f"models/{model_name}.pt"
-    #     print('Saved model at', model_save_path)
-    #     torch.save(model.cpu(), model_save_path)
 
     return pl_model
 

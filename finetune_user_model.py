@@ -34,13 +34,13 @@ def main(model, user_hash, config: configs.BaseConfig):
     artifact.add_dir(online_data_dir, name='offline_adaptattion_data')
     wandb.run.log_artifact(artifact)
 
-    episode_list = load_online_episodes(online_data_dir, episode_filenames, config.finetune_num_episodes)
+    episode_list = load_online_episodes(online_data_dir, episode_filenames, config.finetune.num_episodes)
 
     train_episodes = []
     for ep in episode_list[:-1]:
         train_episodes += ep
 
-    if config.finetune_num_episodes is not None:
+    if config.finetune.num_episodes is not None:
         train_episodes = train_episodes[:1]
 
     val_episodes = episode_list[-1]
@@ -60,16 +60,15 @@ def main(model, user_hash, config: configs.BaseConfig):
     train_offline_adaption_dataset = to_tensor_dataset(train_observations, train_optimal_actions)
     val_offline_adaption_dataset = to_tensor_dataset(val_observations, val_optimal_actions)
 
-    dataloader_args = dict(batch_size=config.finetune_batch_size, num_workers=config.finetune_num_workers)
+    dataloader_args = dict(batch_size=config.finetune.batch_size, num_workers=config.finetune.num_workers)
 
     train_dataloader = DataLoader(train_offline_adaption_dataset, shuffle=True, **dataloader_args)
     val_dataloader = DataLoader(val_offline_adaption_dataset, **dataloader_args)
 
-    model.lr = config.finetune_lr
-    model.freeze_layers(config.finetune_n_frozen_layers)
+    model.lr = config.finetune.lr
+    model.freeze_layers(config.finetune.n_frozen_layers)
 
-    trainer = pl.Trainer(limit_train_batches=config.limit_train_batches, max_epochs=config.finetune_epochs,
-                         log_every_n_steps=1, logger=logger)
+    trainer = pl.Trainer(max_epochs=config.finetune.epochs, log_every_n_steps=1, logger=logger)
 
     trainer.fit(model=model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
     return model
