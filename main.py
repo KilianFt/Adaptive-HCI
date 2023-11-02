@@ -3,9 +3,6 @@ import hashlib
 import os
 import sys
 
-import numpy as np
-import wandb
-
 import configs
 import train_general_model
 import finetune_user_model
