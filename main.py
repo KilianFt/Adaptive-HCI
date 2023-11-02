@@ -30,7 +30,6 @@ def main():
         finetuned_user_model = finetune_user_model.main(initial_model, user_hash, experiment_config)
         user_model = continuously_train_user_model.main(finetuned_user_model, user_hash, experiment_config)
 
-
 def fail_early():
     configs.fail_early()
 

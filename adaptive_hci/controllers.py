@@ -15,12 +15,13 @@ class EMGViT(ViT):
 
 
 class PLModel(pl.LightningModule):
-    def __init__(self, model, n_labels, lr, n_frozen_layers: int, threshold: float):
+    def __init__(self, model, n_labels, lr, n_frozen_layers: int, threshold: float, metric_prefix: str = ''):
         super(PLModel, self).__init__()
         self.save_hyperparameters(ignore=['model'])
         self.model = model
         self.lr = lr
         self.threshold = threshold
+        self.metric_prefix = metric_prefix
         self.criterion = torch.nn.MSELoss()
         self.exact_match = ExactMatch(task="multilabel", num_labels=n_labels, threshold=threshold)
         self.f1_score = F1Score(task="multilabel", num_labels=n_labels, threshold=threshold)
@@ -51,7 +52,7 @@ class PLModel(pl.LightningModule):
         data, targets = batch
         outputs = self.model(data)
         loss = self.criterion(outputs, targets)
-        self.log("train/loss", loss)
+        self.log(f"{self.metric_prefix}train/loss", loss)
         return loss
 
     def get_per_label_accuracies(self, outputs, targets):
@@ -75,13 +76,13 @@ class PLModel(pl.LightningModule):
         val_acc = self.exact_match(outputs, targets)
         val_f1 = self.f1_score(outputs, targets)
         val_loss = F.mse_loss(outputs, targets)
-        self.log('validation/loss', val_loss, prog_bar=True)
-        self.log('validation/acc', val_acc, prog_bar=True)
-        self.log('validation/f1', val_f1, prog_bar=True)
+        self.log(f'{self.metric_prefix}validation/loss', val_loss, prog_bar=True)
+        self.log(f'{self.metric_prefix}validation/acc', val_acc, prog_bar=True)
+        self.log(f'{self.metric_prefix}validation/f1', val_f1, prog_bar=True)
 
         per_label_accuracies = self.get_per_label_accuracies(outputs, targets)
         for label_idx, per_label_acc in enumerate(per_label_accuracies):
-            self.log(f'validation/acc_label_{label_idx}', per_label_acc, prog_bar=True)
+            self.log(f'{self.metric_prefix}validation/acc_label_{label_idx}', per_label_acc, prog_bar=True)
 
         return val_loss, val_acc, val_f1, per_label_accuracies
 

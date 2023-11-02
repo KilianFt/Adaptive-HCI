@@ -6,6 +6,7 @@ import lightning.pytorch as pl
 import torch
 import wandb
 from lightning.pytorch.loggers import WandbLogger
+from lightning.pytorch import LightningModule
 from torch.utils.data import DataLoader
 
 import configs
@@ -21,8 +22,8 @@ file_ids = [
 ]
 
 
-def main(model, user_hash, config: configs.BaseConfig):
-    logger = WandbLogger(project='adaptive_hci', tags=["offline_adaptation", user_hash], config=config,
+def main(model: LightningModule, user_hash, config: configs.BaseConfig) -> LightningModule:
+    logger = WandbLogger(project='adaptive_hci', tags=["finetune", user_hash], config=config,
                          name=f"finetune_{config}_{user_hash[:15]}")
 
     online_data_dir = pathlib.Path('datasets/OnlineData')
@@ -67,10 +68,13 @@ def main(model, user_hash, config: configs.BaseConfig):
 
     model.lr = config.finetune.lr
     model.freeze_layers(config.finetune.n_frozen_layers)
+    model.metric_prefix = f'{user_hash}/finetune/'
 
-    trainer = pl.Trainer(max_epochs=config.finetune.epochs, log_every_n_steps=1, logger=logger)
+    trainer = pl.Trainer(max_epochs=config.finetune.epochs, log_every_n_steps=1, logger=logger,
+                         enable_checkpointing=config.save_checkpoints)
 
     trainer.fit(model=model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
+
     return model
 
 
