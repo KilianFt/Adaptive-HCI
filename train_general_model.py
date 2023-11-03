@@ -63,15 +63,15 @@ def main(logger, experiment_config: configs.BaseConfig) -> LightningModule:
 
     vit = EMGViT(
         image_size=experiment_config.window_size,
-        patch_size=experiment_config.base_model_config.patch_size,
+        patch_size=experiment_config.general_model_config.patch_size,
         num_classes=n_labels,
-        dim=experiment_config.base_model_config.dim,
-        depth=experiment_config.base_model_config.depth,
-        heads=experiment_config.base_model_config.heads,
-        mlp_dim=experiment_config.base_model_config.mlp_dim,
-        dropout=experiment_config.base_model_config.dropout,
-        emb_dropout=experiment_config.base_model_config.emb_dropout,
-        channels=experiment_config.base_model_config.channels,
+        dim=experiment_config.general_model_config.dim,
+        depth=experiment_config.general_model_config.depth,
+        heads=experiment_config.general_model_config.heads,
+        mlp_dim=experiment_config.general_model_config.mlp_dim,
+        dropout=experiment_config.general_model_config.dropout,
+        emb_dropout=experiment_config.general_model_config.emb_dropout,
+        channels=experiment_config.general_model_config.channels,
     )
 
     assert experiment_config.loss in ["MSELoss"], "Only MSELoss is supported for now"
