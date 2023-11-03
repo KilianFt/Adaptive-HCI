@@ -30,7 +30,6 @@ def main():
     general_model = train_general_model.main(logger, experiment_config)
 
     population_metrics = []
-
     for user_hash in train_users:
         initial_model = copy.deepcopy(general_model)
         finetuned_user_model = finetune_user_model.main(initial_model, user_hash, experiment_config)
