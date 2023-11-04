@@ -1,4 +1,3 @@
-torch
 lightning
 gymnasium
 screeninfo
@@ -10,4 +9,9 @@ wandb
 experiment_buddy
 scipy
 scikit-learn
+pydantic
+
+pytorch==1.8.1
+
+# torch This is already loded in the cluster, since we use the conda env traces_llm
 pyopenssl # Mila cluster
