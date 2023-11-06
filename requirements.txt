@@ -1,13 +1,15 @@
-torch
 lightning
 gymnasium
 screeninfo
 stable_baselines3
 pyautogui
 gymnasium-robotics
-vit-pytorch
 wandb
 experiment_buddy
 scipy
 scikit-learn
+pydantic
+
+# torch This is already loded in the cluster, since we use the conda env traces_llm
+torch==1.9.1+cu111
 pyopenssl # Mila cluster
