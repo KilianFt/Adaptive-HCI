@@ -4,7 +4,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
-from common import DataSourceEnum
+from common import DataSourceEnum, BaseModelEnum
 
 ConfigType = Literal['base', 'smoke']
 
@@ -38,7 +38,7 @@ class OnlineConfig(BaseModel):
     num_workers: int = 8
 
 class ViTConfig(BaseModel):
-    base_model_class: str = 'ViT'
+    name: str = 'ViT'
     patch_size: int = 8
     dim: int = 64
     depth: int = 1
@@ -48,16 +48,45 @@ class ViTConfig(BaseModel):
     emb_dropout: float = 0.277
     channels: int = 1
 
+
+class RNNConfig(BaseModel):
+    name: str = 'RNN'
+    input_size: int = 8
+    hidden_size: int = 128
+    num_layers: int = 4
+    dropout: float = 0.1
+    # TODO make sure that data is loaded in right order for this
+
+
+BASE_MODEL_CONFIG_CLASS = {
+    BaseModelEnum.ViT: ViTConfig,
+    BaseModelEnum.RNN: RNNConfig,
+}
+
+BASE_MODEL_CONFIG = {
+    BaseModelEnum.ViT: ViTConfig(),
+    BaseModelEnum.RNN: RNNConfig(),
+}
+
+
+BASE_MODEL_SMOKE_CONFIG = {
+    BaseModelEnum.ViT: ViTConfig(patch_size=8, depth=1, heads=1, mlp_dim=4),
+    BaseModelEnum.RNN: RNNConfig(num_layers=1),
+}
+
+
 class BaseConfig(BaseModel):
     config_type: ConfigType = 'base'
     data_source: DataSourceEnum = DataSourceEnum.MAD
+    base_model_name: BaseModelEnum = BaseModelEnum.RNN
     window_size: int = 200
     overlap: int = 150
     num_classes: int = 5
     random_seed: int = 100
     save_checkpoints: bool = False
 
-    base_model_config: ViTConfig = ViTConfig()
+    # FIXME maybe there's a more elegant way, Union[] typing does not work with buddy
+    base_model: BASE_MODEL_CONFIG_CLASS[base_model_name] = BASE_MODEL_CONFIG[base_model_name]
     pretrain: PretrainConfig = PretrainConfig()
     finetune: FinetuneConfig = FinetuneConfig()
     online: OnlineConfig = OnlineConfig()
@@ -78,6 +107,10 @@ class BaseConfig(BaseModel):
             enum_value = data['data_source'].split('.')[-1]
             data['data_source'] = DataSourceEnum[enum_value]
 
+        if 'base_model_name' in data and isinstance(data['base_model_name'], str):
+            enum_value = data['base_model_name'].split('.')[-1]
+            data['base_model_name'] = BaseModelEnum[enum_value]
+
         super().__init__(**data)
         if self.sweep_config:
             self.proc_num = 4
@@ -94,8 +127,9 @@ class SmokeConfig(BaseConfig):
     hostname: str = ""
     sweep_config: str = ""
     data_source: DataSourceEnum = DataSourceEnum.MiniMAD
+    base_model_name: BaseModelEnum = BaseModelEnum.RNN
 
-    model_config: ViTConfig = ViTConfig(patch_size=8, depth=1, heads=1, mlp_dim=4)
+    base_model: BASE_MODEL_CONFIG_CLASS[base_model_name] = BASE_MODEL_SMOKE_CONFIG[base_model_name]
     pretrain: PretrainConfig = PretrainConfig(epochs=1, batch_size=1)
     finetune: FinetuneConfig = FinetuneConfig(num_episodes=2, epochs=2, num_workers=0)
     online: OnlineConfig = OnlineConfig(num_episodes=2, epochs=1, num_sessions=2, train_intervals=1,

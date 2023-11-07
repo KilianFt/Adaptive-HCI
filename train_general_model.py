@@ -7,8 +7,8 @@ from lightning.pytorch import LightningModule
 import configs
 from adaptive_hci import utils
 from adaptive_hci.datasets import CombinedDataset, EMGWindowsDataset
-from adaptive_hci.controllers import EMGViT, PLModel
-from common import DataSourceEnum
+from adaptive_hci.controllers import PLModel
+from common import DataSourceEnum, BASE_MODELS
 
 
 def get_dataset_(config: configs.BaseConfig):
@@ -61,22 +61,11 @@ def main(logger, experiment_config: configs.BaseConfig) -> LightningModule:
 
     train_dataloader, val_dataloader, n_labels = get_dataset_(experiment_config)
 
-    vit = EMGViT(
-        image_size=experiment_config.window_size,
-        patch_size=experiment_config.base_model_config.patch_size,
-        num_classes=n_labels,
-        dim=experiment_config.base_model_config.dim,
-        depth=experiment_config.base_model_config.depth,
-        heads=experiment_config.base_model_config.heads,
-        mlp_dim=experiment_config.base_model_config.mlp_dim,
-        dropout=experiment_config.base_model_config.dropout,
-        emb_dropout=experiment_config.base_model_config.emb_dropout,
-        channels=experiment_config.base_model_config.channels,
-    )
+    base_model = BASE_MODELS[experiment_config.base_model_name](experiment_config)
 
     assert experiment_config.loss in ["MSELoss"], "Only MSELoss is supported for now"
 
-    pl_model = PLModel(vit, n_labels=n_labels, lr=experiment_config.pretrain.lr, n_frozen_layers=0, threshold=0.5, metric_prefix='pretrain/')
+    pl_model = PLModel(base_model, n_labels=n_labels, lr=experiment_config.pretrain.lr, n_frozen_layers=0, threshold=0.5, metric_prefix='pretrain/')
     trainer = pl.Trainer(max_epochs=experiment_config.pretrain.epochs, log_every_n_steps=1, logger=pl_logger,
                          enable_checkpointing=experiment_config.save_checkpoints)
     trainer.fit(model=pl_model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)

@@ -1,17 +1,80 @@
+import re
 import lightning.pytorch as pl
 import torch
-from torch.functional import F
+import torch.nn as nn
+from torch.nn import functional as F
 from torchmetrics import ExactMatch, F1Score, Accuracy
 from vit_pytorch import ViT
 
 
 class EMGViT(ViT):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, config, *args, **kwargs):
+        super().__init__(image_size=config.window_size,
+            patch_size=config.base_model.patch_size,
+            num_classes=config.num_classes,
+            dim=config.base_model.dim,
+            depth=config.base_model.depth,
+            heads=config.base_model.heads,
+            mlp_dim=config.base_model.mlp_dim,
+            dropout=config.base_model.dropout,
+            emb_dropout=config.base_model.emb_dropout,
+            channels=config.base_model.channels,
+            *args, **kwargs)
 
     def __call__(self, x: torch.Tensor):
         x.unsqueeze_(axis=1)
         return self.forward(x)
+
+    def freeze_layers(self, n_frozen_layers: int) -> None:
+        # reset grad
+        for param in self.parameters():
+            param.requires_grad = True
+
+        # freeze desired ones
+        if n_frozen_layers >= 1:
+            for param in self.to_patch_embedding.parameters():
+                param.requires_grad = False
+            for param in self.dropout.parameters():
+                param.requires_grad = False
+
+        if n_frozen_layers >= 2:
+            for layer_idx in range(min((n_frozen_layers - 1), len(self.transformer.layers))):
+                for param in self.transformer.layers[layer_idx].parameters():
+                    param.requires_grad = False
+
+
+class EMGLSTM(nn.Module):
+    def __init__(self, config, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        # TODO feature encoder?
+        # TODO input last action?
+
+        self.lstm = nn.LSTM(config.base_model.input_size, config.base_model.hidden_size,
+                            config.base_model.num_layers, dropout=config.base_model.dropout,
+                            batch_first=True)
+        self.fc = nn.Linear(config.base_model.hidden_size, config.num_classes)
+
+        # TODO check out how to best initialize weights
+
+    def __call__(self, x: torch.Tensor):
+        x, _ = self.lstm(x.swapaxes(1,2))
+        out = self.fc(x[:, -1, :])
+        return out
+
+    def freeze_layers(self, n_frozen_layers: int) -> None:
+        for param in self.lstm.named_parameters():
+            param[1].requires_grad = False
+
+        if n_frozen_layers > 0:
+            pattern = re.compile(r'(weight|bias)_(ih|hh)_l[0-{0}]'.format((n_frozen_layers-1)))
+
+            if n_frozen_layers > self.lstm.num_layers:
+                print('WARN: trying to freeze more layers than present')
+                n_frozen_layers = self.lstm.num_layers
+
+            for param in self.lstm.named_parameters():
+                if pattern.match(param[0]):
+                    param[1].requires_grad = False
 
 
 class PLModel(pl.LightningModule):
@@ -28,25 +91,9 @@ class PLModel(pl.LightningModule):
         self.accuracy_metric = Accuracy(task='binary')
 
         if n_frozen_layers is not None:
-            self.freeze_layers(n_frozen_layers)
+            self.model.freeze_layers(n_frozen_layers)
 
-    def freeze_layers(self, n_frozen_layers: int) -> None:
-        # reset grad
-        for param in self.model.parameters():
-            param.requires_grad = True
 
-        # freeze desired ones
-        if n_frozen_layers >= 1:
-            for param in self.model.to_patch_embedding.parameters():
-                param.requires_grad = False
-            for param in self.model.dropout.parameters():
-                param.requires_grad = False
-
-        # FIXME adjust for other models than ViT
-        if n_frozen_layers >= 2:
-            for layer_idx in range(min((n_frozen_layers - 1), len(self.model.transformer.layers))):
-                for param in self.model.transformer.layers[layer_idx].parameters():
-                    param.requires_grad = False
 
     def training_step(self, batch, batch_idx):
         data, targets = batch
