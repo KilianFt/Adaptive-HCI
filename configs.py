@@ -2,8 +2,8 @@ import hashlib
 import pickle
 from typing import Literal, Optional
 
-from pydantic import Field, ConfigDict
 import pydantic
+from pydantic import Field, Extra
 
 from common import DataSourceEnum
 
@@ -11,7 +11,12 @@ ConfigType = Literal['base', 'smoke']
 
 
 class BaseModel(pydantic.BaseModel):
-    model_config = ConfigDict(extra='forbid')
+    class Config:
+        extra = Extra.forbid  # This will forbid any extra fields
+
+
+#     # pass
+#     # model_config = ConfigDict(extra='forbid')
 
 
 class PretrainConfig(BaseModel):
@@ -67,10 +72,10 @@ class BaseConfig(BaseModel):
     random_seed: int = 100
     save_checkpoints: bool = False
 
-    general_model_config: ViTConfig = ViTConfig()
-    pretrain: PretrainConfig = PretrainConfig()
-    finetune: FinetuneConfig = FinetuneConfig()
-    online: OnlineConfig = OnlineConfig()
+    # general_model_config: ViTConfig = Field(default_factory=ViTConfig)
+    # pretrain: PretrainConfig = Field(default_factory=PretrainConfig)
+    # finetune: FinetuneConfig = Field(default_factory=FinetuneConfig)
+    # online: OnlineConfig = Field(default_factory=OnlineConfig)
 
     hostname: str = "mila"
     # hostname: str = ""
@@ -105,11 +110,11 @@ class SmokeConfig(BaseConfig):
     # sweep_config: str = ""
     data_source: DataSourceEnum = DataSourceEnum.MiniMAD
 
-    general_model_config: ViTConfig = ViTConfig(patch_size=8, depth=1, heads=1, mlp_dim=4)
-    pretrain: PretrainConfig = PretrainConfig(epochs=1, batch_size=1, num_workers=0)
-    finetune: FinetuneConfig = FinetuneConfig(num_episodes=2, epochs=2, num_workers=0)
-    online: OnlineConfig = OnlineConfig(num_episodes=2, epochs=1, num_sessions=2, train_intervals=1,
-                                        first_training_episode=0, num_workers=0)
+    general_model_config: ViTConfig = Field(default_factory=lambda: ViTConfig(patch_size=8, depth=1, heads=1, mlp_dim=4))
+    pretrain: PretrainConfig = Field(default_factory=lambda: PretrainConfig(epochs=1, batch_size=1, num_workers=0))
+    finetune: FinetuneConfig = Field(default_factory=lambda: FinetuneConfig(num_episodes=2, epochs=2, num_workers=0))
+    online: OnlineConfig = Field(default_factory=lambda: OnlineConfig(num_episodes=2, epochs=1, num_sessions=2, train_intervals=1,
+                                                                      first_training_episode=0, num_workers=0))
 
 
 def fail_early():
