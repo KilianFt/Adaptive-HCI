@@ -2,16 +2,19 @@ import hashlib
 import pickle
 from typing import Literal, Optional
 
-from pydantic import Field, ConfigDict
-import pydantic
+from pydantic import BaseModel
+from pydantic import Field, Extra
 
 from common import DataSourceEnum
 
 ConfigType = Literal['base', 'smoke']
 
 
-class BaseModel(pydantic.BaseModel):
-    model_config = ConfigDict(extra='forbid')
+# class BaseModel(pydantic.BaseModel):
+#     # pass
+#     # model_config = ConfigDict(extra='forbid')
+#     class Config:
+#         extra = Extra.forbid  # This will forbid any extra fields
 
 
 class PretrainConfig(BaseModel):
@@ -80,8 +83,8 @@ class BaseConfig(BaseModel):
     proc_num: int = 1
     loss: str = "MSELoss"
 
-    class Config:
-        validate_assignment = True
+    # class Config:
+    #     validate_assignment = True
 
     def __init__(self, **data):
         if 'data_source' in data and isinstance(data['data_source'], str):
