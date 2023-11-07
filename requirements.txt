@@ -1,13 +1,19 @@
-torch
-lightning
+lightning==1.9
 gymnasium
 screeninfo
 stable_baselines3
 pyautogui
 gymnasium-robotics
-vit-pytorch
 wandb
 experiment_buddy
 scipy
 scikit-learn
+pydantic==1.9.0
+
 pyopenssl # Mila cluster
+
+# The order of the following is important due to version hell
+vit_pytorch # has to come before torch and torchvision
+torchvision==0.10.1 #
+torch==1.9.1+cu111
+fastapi==0.88.0 # This is necessary because another model requires starlette and fastapi pins a specific version.. so it has to come last
