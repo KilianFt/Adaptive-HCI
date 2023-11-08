@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import os
 import pickle
 import subprocess
@@ -52,6 +53,8 @@ def maybe_download_drive_folder(destination_folder, file_ids):
     if not os.path.exists(destination_folder):
         os.makedirs(destination_folder)
 
+    logging.info("Downloading files from Google Drive")
     for file_id in file_ids:
+        logging.info(f"Downloading file with id {file_id} to {destination_folder}")
         cmd = f"gdown https://drive.google.com/uc?id={file_id} -O {destination_folder}"
-        subprocess.call(cmd, shell=True)
+        print(subprocess.check_output(cmd, shell=True).decode())
