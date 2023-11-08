@@ -24,13 +24,16 @@ def main():
         experiment_config = configs.BaseConfig()
     experiment_config = configs.SmokeConfig()
 
-    entity = "delvermm" if "delverm" in os.getlogin() else "kilian"
+    try:
+        entity = "delvermm" if "delverm" in os.getlogin() else "kilian"
+    except OSError:  # Happens on mila cluster
+        entity = "delvermm"
+
     logger, experiment_config = buddy_setup(experiment_config, entity=entity)
 
     general_model = train_general_model.main(logger, experiment_config)
 
     population_metrics = []
-
     for user_hash in train_users:
         initial_model = copy.deepcopy(general_model)
         finetuned_user_model = finetune_user_model.main(initial_model, user_hash, experiment_config)
@@ -46,10 +49,9 @@ def main():
                     user_accuracies.append(value)
         population_accuracies.append(np.mean(user_accuracies))
 
-    logger.log(
-        "population/mean_accuracy",
-        np.mean(population_accuracies)
-    )
+    logger.log({
+        "population/mean_accuracy": np.mean(population_accuracies)
+    })
 
 
 def fail_early():
