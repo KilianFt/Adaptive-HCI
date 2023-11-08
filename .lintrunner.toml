@@ -1,0 +1,16 @@
+merge_base_with = 'main'
+
+[[linter]]
+name = 'FLAKE8'
+include_patterns = [
+  'src/**/*.py',  # unix-style globs supported
+  'test/**/*.py',
+]
+exclude_patterns = ['src/my_bad_file.py']
+command = [
+  'python3',
+  'flake8_linter.py',
+  '—-',
+  # {{PATHSFILE}} gets rewritten to a tmpfile containing all paths to lint
+  '@{{PATHSFILE}}',
+]
