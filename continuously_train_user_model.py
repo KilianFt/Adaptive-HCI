@@ -1,9 +1,6 @@
 import argparse
-import collections
 import hashlib
-import os
 import re
-import pathlib
 import random
 from typing import Tuple, Dict, List
 
@@ -20,22 +17,14 @@ import configs
 from adaptive_hci import datasets
 from adaptive_hci.controllers import PLModel
 from adaptive_hci.datasets import to_tensor_dataset
-from adaptive_hci.utils import maybe_download_drive_folder
+from adaptive_hci.datasets import get_stored_sessions
 from online_adaptation import replay_buffers
 
-file_ids = [
+adaptation_file_ids = [
     "1-ZARLHsK1k958Bk2-mlQdrRblLreM8_j",
     "1-jjFfGdP5Y8lUk6_prdUSdRmpfEH0W3w",
     "1-hCAag7xc3_l7u8bHUfUNOTe0j95ZGrz",
 ]
-
-
-def get_stored_sessions(config):
-    online_data_dir = pathlib.Path('datasets/OnlineAdaptation')
-    maybe_download_drive_folder(online_data_dir, file_ids=file_ids)
-    episode_filenames = sorted(os.listdir(online_data_dir))
-    online_sessions = datasets.load_online_episodes(online_data_dir, episode_filenames, config.online.num_sessions)
-    return online_sessions
 
 
 def sweep_wrapper():
@@ -119,7 +108,7 @@ def main(pl_model: LightningModule, user_hash, config: configs.BaseConfig) -> Tu
     logger = WandbLogger(project='adaptive_hci', tags=["online_adaptation", user_hash],
                          config=config, name=f"online_adapt_{config}_{user_hash}")
 
-    online_sessions = get_stored_sessions(config)
+    online_sessions = get_stored_sessions(stage="Adaptation", file_ids=adaptation_file_ids, num_episodes=config.online.num_sessions)
 
     valid_metrics = []
     for session_idx, current_trial_episodes in enumerate(online_sessions):
