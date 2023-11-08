@@ -80,6 +80,8 @@ def load_online_episodes(base_dir, filenames, num_episodes):
             episodes = pickle.load(f)
             online_episodes_list.append(episodes)
 
+    if not online_episodes_list:
+        raise ValueError(f"No episodes found in {base_dir}\n filenames {filenames}")
     return online_episodes_list
 
 
