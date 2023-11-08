@@ -4,15 +4,13 @@ import sys
 
 import lightning.pytorch as pl
 import torch
-import wandb
-from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch import LightningModule
+from lightning.pytorch.loggers import WandbLogger
 from torch.utils.data import DataLoader
 
 import configs
 from adaptive_hci.datasets import get_concatenated_user_episodes, load_online_episodes, to_tensor_dataset
 from adaptive_hci.utils import maybe_download_drive_folder
-
 
 file_ids = [
     "1Sitb0ooo2izvkHQGNQkXTGoDV4CJAnFF",
@@ -21,19 +19,20 @@ file_ids = [
     "1EWJdHHZ22xorZEpss-gf5R4cxehEs9pt",
 ]
 
+is_slurm_job = os.environ.get("SLURM_JOB_ID") is not None
+if is_slurm_job:
+    online_data_dir = pathlib.Path('/home/mila/d/delvermm/scratch/adaptive_hci/datasets/OnlineData')
+else:
+    online_data_dir = pathlib.Path('datasets/OnlineData')
+
 
 def main(model: LightningModule, user_hash, config: configs.BaseConfig) -> LightningModule:
+    print("Starting finetuning data is at", online_data_dir)
     logger = WandbLogger(project='adaptive_hci', tags=["finetune", user_hash], config=config,
                          name=f"finetune_{config}_{user_hash[:15]}")
 
-    online_data_dir = pathlib.Path('datasets/OnlineData')
     maybe_download_drive_folder(online_data_dir, file_ids=file_ids)
-
     episode_filenames = sorted(os.listdir(online_data_dir))
-
-    artifact = wandb.Artifact(name="offline_adaptattion_data", type="dataset")
-    artifact.add_dir(online_data_dir, name='offline_adaptattion_data')
-    wandb.run.log_artifact(artifact)
 
     episode_list = load_online_episodes(online_data_dir, episode_filenames, config.finetune.num_episodes)
 
