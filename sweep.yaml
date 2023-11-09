@@ -6,7 +6,7 @@ command:
   - ${program}
   - ${args}
 metric:
-  name: avg_reward
+  name: population/mean_accuracy
   goal: maximize
 method: bayes
 parameters:
