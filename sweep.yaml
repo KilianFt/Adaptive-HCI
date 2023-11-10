@@ -6,7 +6,7 @@ command:
   - ${program}
   - ${args}
 metric:
-  name: avg_reward
+  name: population/mean_f1
   goal: maximize
 method: bayes
 parameters:
@@ -30,8 +30,6 @@ parameters:
         max: 0.25
   pretrain:
     parameters:
-      early_stopping:
-        values: [ True, False ]
       epochs:
         values: [ 1, 2, 3, 4, 5 ]
       batch_size:
