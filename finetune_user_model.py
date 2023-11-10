@@ -22,7 +22,7 @@ file_ids = [
 ]
 
 
-def main(model: LightningModule, user_hash, config: configs.BaseConfig) -> LightningModule:
+def main(pl_model: LightningModule, user_hash, config: configs.BaseConfig) -> LightningModule:
     logger = WandbLogger(project='adaptive_hci', tags=["finetune", user_hash], config=config,
                          name=f"finetune_{config}_{user_hash[:15]}")
 
@@ -66,16 +66,16 @@ def main(model: LightningModule, user_hash, config: configs.BaseConfig) -> Light
     train_dataloader = DataLoader(train_offline_adaption_dataset, shuffle=True, **dataloader_args)
     val_dataloader = DataLoader(val_offline_adaption_dataset, **dataloader_args)
 
-    model.lr = config.finetune.lr
-    model.freeze_layers(config.finetune.n_frozen_layers)
-    model.metric_prefix = f'{user_hash}/finetune/'
+    pl_model.lr = config.finetune.lr
+    pl_model.model.freeze_layers(config.finetune.n_frozen_layers)
+    pl_model.metric_prefix = f'{user_hash}/finetune/'
 
     trainer = pl.Trainer(max_epochs=config.finetune.epochs, log_every_n_steps=1, logger=logger,
                          enable_checkpointing=config.save_checkpoints)
 
-    trainer.fit(model=model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
+    trainer.fit(model=pl_model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 
-    return model
+    return pl_model
 
 
 if __name__ == '__main__':
