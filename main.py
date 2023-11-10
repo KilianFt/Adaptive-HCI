@@ -11,6 +11,8 @@ import finetune_user_model
 import continuously_train_user_model
 from deployment.buddy import buddy_setup
 
+from adaptive_hci.utils import reload_general_model
+
 train_users = [
     hashlib.sha256("Kilian".encode("utf-8")).hexdigest()[:15],
     hashlib.sha256("Manuel".encode("utf-8")).hexdigest()[:15],
@@ -25,9 +27,10 @@ def main():
     experiment_config = configs.SmokeConfig()
 
     try:
-        entity = "delvermm" if "delverm" in os.getlogin() else "kilian"
+        entity = "kilian"#"delvermm"# if "delverm" in os.getlogin() else "kilian"
     except OSError:  # Happens on mila cluster
-        entity = "delvermm"
+        entity = "kilian"#"delvermm"
+        # entity = "kilian"
 
     logger, experiment_config = buddy_setup(experiment_config, entity=entity)
 
@@ -35,22 +38,28 @@ def main():
 
     population_metrics = []
     for user_hash in train_users:
-        initial_model = copy.deepcopy(general_model)
+        initial_model = reload_general_model(config=experiment_config)
         finetuned_user_model = finetune_user_model.main(initial_model, user_hash, experiment_config)
         user_model, metrics = continuously_train_user_model.main(finetuned_user_model, user_hash, experiment_config)
         population_metrics.append(metrics)
 
     population_accuracies = []
+    population_f1s = []
     for user_metrics in population_metrics:
         user_accuracies = []
+        user_f1s = []
         for user_session_metric in user_metrics:
             for key, value in user_session_metric.items():
                 if key.endswith("validation/acc"):
                     user_accuracies.append(value)
+                elif key.endswith("validation/f1"):
+                    user_f1s.append(value)
         population_accuracies.append(np.mean(user_accuracies))
+        population_f1s.append(np.mean(user_f1s))
 
     logger.log({
-        "population/mean_accuracy": np.mean(population_accuracies)
+        "population/mean_accuracy": np.mean(population_accuracies),
+        "population/mean_f1": np.mean(population_f1s)
     })
 
 
