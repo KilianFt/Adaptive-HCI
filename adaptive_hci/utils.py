@@ -1,9 +1,20 @@
 import hashlib
 import os
 import pickle
+import pathlib
 from functools import wraps
 
 import numpy as np
+
+from adaptive_hci.controllers import EMGViT, PLModel
+
+# FIXME
+is_slurm_job = os.environ.get("SLURM_JOB_ID") is not None
+if is_slurm_job:
+    base_data_dir = pathlib.Path('/home/mila/d/delvermm/scratch/adaptive_hci/')
+else:
+    base_data_dir = pathlib.Path('./')
+
 
 def labels_to_onehot(label):
     onehot = np.zeros(5)
@@ -39,3 +50,22 @@ def disk_cache(func):
         return result
 
     return wrapper
+
+def reload_general_model(config):
+    genearal_model_ckpt = base_data_dir.parent / 'general_model.ckpt'
+
+    model = EMGViT(
+        image_size=config.window_size,
+        patch_size=config.general_model_config.patch_size,
+        num_classes=config.num_classes,
+        dim=config.general_model_config.dim,
+        depth=config.general_model_config.depth,
+        heads=config.general_model_config.heads,
+        mlp_dim=config.general_model_config.mlp_dim,
+        dropout=config.general_model_config.dropout,
+        emb_dropout=config.general_model_config.emb_dropout,
+        channels=config.general_model_config.channels,
+    )
+    pl_model = PLModel.load_from_checkpoint(genearal_model_ckpt, model=model)
+
+    return pl_model
