@@ -1,10 +1,10 @@
 import hashlib
 import pickle
-from typing import Literal, Optional
+from typing import Literal, Optional, List
 
 from pydantic import BaseModel, Field
 
-from common import DataSourceEnum, BaseModelEnum
+from common import DataSourceEnum, GeneralModelEnum, EncoderModelEnum
 
 ConfigType = Literal['base', 'smoke']
 
@@ -49,44 +49,61 @@ class ViTConfig(BaseModel):
     channels: int = 1
 
 
-class RNNConfig(BaseModel):
-    name: str = 'RNN'
+class LSTMConfig(BaseModel):
+    name: str = 'lstm'
     input_size: int = 8
     hidden_size: int = 128
     num_layers: int = 4
     dropout: float = 0.1
-    # TODO make sure that data is loaded in right order for this
 
 
-BASE_MODEL_CONFIG_CLASS = {
-    BaseModelEnum.ViT: ViTConfig,
-    BaseModelEnum.RNN: RNNConfig,
+class TCNConfig(BaseModel):
+    name: str = 'tcn'
+    kernel_size: int = 2
+    channels: int = 1
+    num_layers: int = 1
+    bias: bool = True
+
+class ContextClassifierConfig(BaseModel):
+    hidden_sizes: List[int] = Field(default=[128])
+    # TODO load config of encoder_name
+    # encoder: LSTMConfig = LSTMConfig()
+
+    # def __init__(self, **data):
+    #     if 'encoder_name' in data and isinstance(data['encoder_name'], str):
+    #         enum_value = data['encoder_name'].split('.')[-1]
+    #         data['encoder_name'] = EncoderModelEnum[enum_value]
+
+
+GENERAL_MODEL_CONFIG = {
+    GeneralModelEnum.ViT: ViTConfig,
+    GeneralModelEnum.CClassifier: ContextClassifierConfig,
 }
 
-BASE_MODEL_CONFIG = {
-    BaseModelEnum.ViT: ViTConfig(),
-    BaseModelEnum.RNN: RNNConfig(),
-}
 
-
-BASE_MODEL_SMOKE_CONFIG = {
-    BaseModelEnum.ViT: ViTConfig(patch_size=8, depth=1, heads=1, mlp_dim=4),
-    BaseModelEnum.RNN: RNNConfig(num_layers=1),
+GENERAL_MODEL_SMOKE_CONFIG = {
+    GeneralModelEnum.ViT: ViTConfig(patch_size=8, depth=1, heads=1, mlp_dim=4),
+    GeneralModelEnum.CClassifier: ContextClassifierConfig(),
 }
 
 
 class BaseConfig(BaseModel):
     config_type: ConfigType = 'base'
     data_source: DataSourceEnum = DataSourceEnum.MAD
-    base_model_name: BaseModelEnum = BaseModelEnum.RNN
+    general_model_name: GeneralModelEnum = GeneralModelEnum.CClassifier
     window_size: int = 200
+    feat_size: int = 8
+    append_action: bool = True  # if classifier input should receive last action
     overlap: int = 150
     num_classes: int = 5
     random_seed: int = 100
     save_checkpoints: bool = False
 
     # FIXME maybe there's a more elegant way, Union[] typing does not work with buddy
-    base_model: BASE_MODEL_CONFIG_CLASS[base_model_name] = BASE_MODEL_CONFIG[base_model_name]
+    general_model: GENERAL_MODEL_CONFIG[general_model_name] = GENERAL_MODEL_CONFIG[general_model_name]()
+    encoder: TCNConfig = TCNConfig()  # FIXME
+    encoder_name: str = EncoderModelEnum.TCN  # FIXME
+
     pretrain: PretrainConfig = PretrainConfig()
     finetune: FinetuneConfig = FinetuneConfig()
     online: OnlineConfig = OnlineConfig()
@@ -107,9 +124,9 @@ class BaseConfig(BaseModel):
             enum_value = data['data_source'].split('.')[-1]
             data['data_source'] = DataSourceEnum[enum_value]
 
-        if 'base_model_name' in data and isinstance(data['base_model_name'], str):
-            enum_value = data['base_model_name'].split('.')[-1]
-            data['base_model_name'] = BaseModelEnum[enum_value]
+        if 'general_model_name' in data and isinstance(data['general_model_name'], str):
+            enum_value = data['general_model_name'].split('.')[-1]
+            data['general_model_name'] = GeneralModelEnum[enum_value]
 
         super().__init__(**data)
         if self.sweep_config:
@@ -127,9 +144,9 @@ class SmokeConfig(BaseConfig):
     hostname: str = ""
     sweep_config: str = ""
     data_source: DataSourceEnum = DataSourceEnum.MiniMAD
-    base_model_name: BaseModelEnum = BaseModelEnum.RNN
+    general_model_name: GeneralModelEnum = GeneralModelEnum.CClassifier
 
-    base_model: BASE_MODEL_CONFIG_CLASS[base_model_name] = BASE_MODEL_SMOKE_CONFIG[base_model_name]
+    base_model: GENERAL_MODEL_CONFIG[general_model_name] = GENERAL_MODEL_SMOKE_CONFIG[general_model_name]
     pretrain: PretrainConfig = PretrainConfig(epochs=1, batch_size=1)
     finetune: FinetuneConfig = FinetuneConfig(num_episodes=2, epochs=2, num_workers=0)
     online: OnlineConfig = OnlineConfig(num_episodes=2, epochs=1, num_sessions=2, train_intervals=1,
