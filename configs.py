@@ -16,7 +16,6 @@ class BaseModel(pydantic.BaseModel):
 
 
 class PretrainConfig(BaseModel):
-    early_stopping: bool = False
     epochs: int = 40
     batch_size: int = 32
     lr: float = 0.0007
@@ -91,7 +90,7 @@ class BaseConfig(BaseModel):
 
         super().__init__(**data)
         if self.sweep_config:
-            self.proc_num = 4
+            self.proc_num = 1#4
 
     def __str__(self):
         arg_str = pickle.dumps(self.dict())
