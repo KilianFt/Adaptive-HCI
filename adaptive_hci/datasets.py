@@ -13,13 +13,7 @@ from torch.utils import data
 from torch.utils.data import TensorDataset
 
 from common import DataSourceEnum
-from .utils import labels_to_onehot, predictions_to_onehot
-
-is_slurm_job = os.environ.get("SLURM_JOB_ID") is not None
-if is_slurm_job:
-    base_data_dir = pathlib.Path('/home/mila/d/delvermm/scratch/adaptive_hci/datasets/')
-else:
-    base_data_dir = pathlib.Path('datasets/')
+from .utils import labels_to_onehot, predictions_to_onehot, base_data_dir
 
 gesture_names = [
     "rest",
@@ -88,6 +82,7 @@ def get_terminals(episodes, rewards):
 
 
 def get_concatenated_user_episodes(episodes):
+    assert len(episodes) > 0, 'Episodes empty'
     actions = np.concatenate([predictions_to_onehot(e['actions'].detach().numpy()) for e in episodes]).squeeze()
 
     optimal_actions = np.concatenate([e['optimal_actions'].detach().numpy() for e in episodes])
@@ -476,4 +471,9 @@ def maybe_download_drive_folder(destination_folder, file_ids):
     for file_id in file_ids:
         cmd = f"gdown https://drive.google.com/uc?id={file_id} -O {destination_folder}"
         subprocess.call(cmd, shell=True)
-        # TODO: ensure the file is actually downloaded, crash otherwise
+
+    all_files = os.listdir(destination_folder)
+    number_of_pkl_files = len([file for file in all_files if file.endswith(".pkl")])
+
+    assert number_of_pkl_files == len(file_ids), f"Number of files {number_of_pkl_files} in {destination_folder} " \
+                                                 f"does not match number of file IDs {len(file_ids)}"
