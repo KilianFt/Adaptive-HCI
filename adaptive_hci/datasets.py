@@ -88,9 +88,20 @@ def get_terminals(episodes, rewards):
 
 
 def get_concatenated_user_episodes(episodes):
-    actions = np.concatenate([predictions_to_onehot(e['actions'].detach().numpy()) for e in episodes]).squeeze()
+    assert len(episodes) > 0, 'Episodes empty'
+    action_list = [predictions_to_onehot(e['actions'].detach().numpy()) for e in episodes]
+    optimal_actions_list = [e['optimal_actions'].detach().numpy() for e in episodes]
 
-    optimal_actions = np.concatenate([e['optimal_actions'].detach().numpy() for e in episodes])
+    assert len(action_list) > 0, 'Action list empty: {action_list}'
+    assert len(optimal_actions_list) > 0, 'Action list empty: {action_list}'
+
+    try:
+        actions = np.concatenate(action_list).squeeze()
+        optimal_actions = np.concatenate(optimal_actions_list)
+    except:
+        print(f"Contents of action_list: {action_list}")
+        print(f"Contents of optimal_actions_list: {optimal_actions_list}")
+
     observations = np.concatenate([e['user_signals'] for e in episodes]).squeeze()
     rewards = np.concatenate([e['rewards'] for e in episodes]).squeeze()
 
@@ -444,8 +455,8 @@ def get_stored_sessions(stage: str, file_ids, num_episodes):
     stage = pathlib.Path("Online" + stage)
     data_dir = base_data_dir / stage
 
-    maybe_download_drive_folder(data_dir, file_ids=file_ids)
-    filenames = sorted(f for f in os.listdir(data_dir) if f.endswith('.pkl'))
+    filenames = maybe_download_drive_folder(data_dir, file_ids=file_ids)
+    # filenames = sorted(f for f in os.listdir(data_dir) if f.endswith('.pkl'))
 
     online_episodes_list = []
 
@@ -464,16 +475,27 @@ def get_stored_sessions(stage: str, file_ids, num_episodes):
 
 
 def maybe_download_drive_folder(destination_folder, file_ids):
-    destination_folder = destination_folder.as_posix() + '/'
-    if os.path.exists(destination_folder):
-        print("Folder already exists")
-        return
+    _destination_folder = destination_folder.as_posix() + '/'
 
-    if not os.path.exists(destination_folder):
-        os.makedirs(destination_folder)
+    all_files = os.listdir(_destination_folder)
+    filenames = [file for file in all_files if file.endswith(".pkl")]
+
+    if os.path.exists(_destination_folder) and len(filenames) == len(file_ids):
+        print("Folder already exists")
+        return sorted(filenames)
+
+    if not os.path.exists(_destination_folder):
+        os.makedirs(_destination_folder)
 
     logging.info("Downloading files from Google Drive")
     for file_id in file_ids:
-        cmd = f"gdown https://drive.google.com/uc?id={file_id} -O {destination_folder}"
+        cmd = f"gdown https://drive.google.com/uc?id={file_id} -O {_destination_folder}"
         subprocess.call(cmd, shell=True)
-        # TODO: ensure the file is actually downloaded, crash otherwise
+
+
+    all_files = os.listdir(_destination_folder)
+    filenames = [file for file in all_files if file.endswith(".pkl")]
+
+    assert len(filenames) == len(file_ids), 'Not all files exist {filenames}'
+
+    return sorted(filenames)

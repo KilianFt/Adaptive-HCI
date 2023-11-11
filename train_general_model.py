@@ -76,10 +76,12 @@ def main(logger, experiment_config: configs.BaseConfig) -> LightningModule:
 
     assert experiment_config.loss in ["MSELoss"], "Only MSELoss is supported for now"
 
-    pl_model = PLModel(vit, n_labels=n_labels, lr=experiment_config.pretrain.lr, n_frozen_layers=0, threshold=0.5, metric_prefix='pretrain/')
+    pl_model = PLModel(vit, n_labels=experiment_config.num_classes, lr=experiment_config.pretrain.lr, n_frozen_layers=0, threshold=0.5, metric_prefix='pretrain/')
     trainer = pl.Trainer(max_epochs=experiment_config.pretrain.epochs, log_every_n_steps=1, logger=pl_logger,
                          enable_checkpointing=experiment_config.save_checkpoints)
     trainer.fit(model=pl_model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
+    # genearal_model_ckpt = utils.base_data_dir.parent / 'general_model.ckpt'
+    # trainer.save_checkpoint(genearal_model_ckpt)
 
     return pl_model
 
