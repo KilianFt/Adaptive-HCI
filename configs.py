@@ -16,7 +16,6 @@ class BaseModel(pydantic.BaseModel):
 
 
 class PretrainConfig(BaseModel):
-    early_stopping: bool = False
     epochs: int = 40
     batch_size: int = 32
     lr: float = 0.0007
