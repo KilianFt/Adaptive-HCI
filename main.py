@@ -13,7 +13,7 @@ from deployment.buddy import buddy_setup
 
 train_users = [
     hashlib.sha256("Kilian".encode("utf-8")).hexdigest()[:15],
-    hashlib.sha256("Manuel".encode("utf-8")).hexdigest()[:15],
+    # hashlib.sha256("Manuel".encode("utf-8")).hexdigest()[:15],
 ]
 
 
@@ -22,7 +22,7 @@ def main():
         experiment_config = configs.SmokeConfig()
     else:
         experiment_config = configs.BaseConfig()
-    experiment_config = configs.SmokeConfig()
+    # experiment_config = configs.SmokeConfig()
 
     try:
         entity = "delvermm" if "delverm" in os.getlogin() else "kilian"
@@ -41,16 +41,22 @@ def main():
         population_metrics.append(metrics)
 
     population_accuracies = []
+    population_f1s = []
     for user_metrics in population_metrics:
         user_accuracies = []
+        user_f1s = []
         for user_session_metric in user_metrics:
             for key, value in user_session_metric.items():
                 if key.endswith("validation/acc"):
                     user_accuracies.append(value)
+                elif key.endswith("validation/f1"):
+                    user_f1s.append(value)
         population_accuracies.append(np.mean(user_accuracies))
+        population_f1s.append(np.mean(user_f1s))
 
     logger.log({
-        "population/mean_accuracy": np.mean(population_accuracies)
+        "population/mean_accuracy": np.mean(population_accuracies),
+        "population/mean_f1": np.mean(population_f1s)
     })
 
 
