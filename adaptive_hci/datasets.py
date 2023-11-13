@@ -110,8 +110,8 @@ def get_concatenated_user_episodes(episodes):
     except:
         print(f"Contents of action_list: {action_list}")
         print(f"Contents of optimal_actions_list: {optimal_actions_list}")
-        print(f"Contents of observations: {observations}")
-        print(f"Contents of rewards: {rewards}")
+        print(f"Contents of observations: {observations_list}")
+        print(f"Contents of rewards: {rewards_list}")
 
     terminals = get_terminals(episodes, rewards)
 
