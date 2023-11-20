@@ -26,8 +26,8 @@ parameters:
         max: 0.25
       emb_dropout:
         distribution: uniform
-        min: 0.1
-        max: 0.25
+        min: 0.0
+        max: 0.15
   pretrain:
     parameters:
       epochs:
@@ -59,7 +59,7 @@ parameters:
   online:
     parameters:
       num_episodes:
-        values: [ 1, 2, 3, 4, 5 ]
+        values: [ 2, 6, 10 ]
       batch_size:
         values: [ 1, 2, 4, 8, 16 ]
       epochs:
