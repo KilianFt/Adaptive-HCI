@@ -102,7 +102,7 @@ def main(pl_model: LightningModule, user_hash, config: configs.BaseConfig) -> Tu
     if config is None:
         config = wandb.config
 
-    pl_model.freeze_layers(config.online.n_frozen_layers)
+    pl_model.model.freeze_layers(config.online.n_frozen_layers)
     pl_model.lr = config.online.lr
 
     logger = WandbLogger(project='adaptive_hci', tags=["online_adaptation", user_hash],

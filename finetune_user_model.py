@@ -55,7 +55,7 @@ def main(model: LightningModule, user_hash, config: configs.BaseConfig) -> Light
     val_dataloader = DataLoader(val_offline_adaption_dataset, **dataloader_args)
 
     model.lr = config.finetune.lr
-    model.freeze_layers(config.finetune.n_frozen_layers)
+    model.model.freeze_layers(config.finetune.n_frozen_layers)
     model.metric_prefix = f'{user_hash}/finetune/'
     model.step_count = 0
 
