@@ -459,25 +459,40 @@ class CombinedDataset(data.Dataset):
         return self.dataset1.labels.shape[1]
 
 
-def get_stored_sessions(stage: str, file_ids, num_episodes):
-    stage = pathlib.Path("Online" + stage)
-    data_dir = base_data_dir / stage
-
-    filenames = maybe_download_drive_folder(data_dir, file_ids=file_ids)
-
+def load_files(data_dir, filenames):
     online_episodes_list = []
-
-    if num_episodes is not None:
-        filenames = filenames[:num_episodes]
-
+ 
     for filename in filenames:
         filepath = data_dir / filename
         with open(filepath, 'rb') as f:
             episodes = pickle.load(f)
             online_episodes_list.append(episodes)
 
-    if not online_episodes_list:
-        raise ValueError(f"No episodes found in {data_dir}\n filenames {filenames}")
+    return online_episodes_list
+
+
+def get_stored_sessions(stage: str, file_ids, num_episodes):
+    stage = pathlib.Path("Online" + stage)
+    data_dir = base_data_dir / stage
+
+    filenames = maybe_download_drive_folder(data_dir, file_ids=file_ids)
+
+    if num_episodes is not None:
+        filenames = filenames[:num_episodes]
+
+    online_episodes_list = load_files(data_dir, filenames)
+
+    # check if episodes contain information
+    if not online_episodes_list or len(online_episodes_list[0][0]['user_signals']) == 0:
+        print('Retrying to load files')
+        time.sleep(torch.randint(1, 10, size=(1,)))
+
+        # try download again
+        online_episodes_list = load_files(data_dir, filenames)
+
+        assert len(online_episodes_list[0][0]['user_signals']) > 0, \
+            f"Could not load episode files in {data_dir}\n filenames {filenames}"
+
     return online_episodes_list
 
 
