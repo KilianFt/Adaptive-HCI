@@ -12,24 +12,46 @@ method: bayes
 parameters:
   general_model_config:
     parameters:
-      patch_size:
-        values: [ 2, 4, 8 ]
-      dim:
-        values: [ 64, 128, 256 ]
-      depth:
-        values: [ 1, 2, 3 ]
-      heads:
-        values: [ 1, 2, 4 ]
-      mlp_dim:
-        values: [ 128, 256, 512 ]
-      dropout:
+      # patch_size:
+      #   values: [ 2, 4, 8 ]
+      # dim:
+      #   values: [ 64, 128, 256 ]
+      # depth:
+      #   values: [ 1, 2, 3 ]
+      # heads:
+      #   values: [ 1, 2, 4 ]
+      # mlp_dim:
+      #   values: [ 128, 256, 512 ]
+      # dropout:
+      #   distribution: uniform
+      #   min: 0.1
+      #   max: 0.25
+      # emb_dropout:
+      #   distribution: uniform
+      #   min: 0.0
+      #   max: 0.15
+      out_channels:
+        values: [ 2, 4, 6, 8]
+      kernel_size:
         distribution: uniform
-        min: 0.1
-        max: 0.25
-      emb_dropout:
+        min: 1
+        max: 5
+      channels:
         distribution: uniform
-        min: 0.0
-        max: 0.15
+        min: 1
+        max: 5
+      layers:
+        distribution: uniform
+        min: 1
+        max: 5
+      bias:
+        values: [ True, False ]
+      classification_hidden_size:
+        values: [ 64, 128, 254 ]
+      classification_n_layers:
+        distribution: uniform
+        min: 1
+        max: 5
   pretrain:
     parameters:
       epochs:

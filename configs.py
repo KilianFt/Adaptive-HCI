@@ -5,7 +5,7 @@ from typing import Literal, Optional
 import pydantic
 from pydantic import Field, Extra
 
-from common import DataSourceEnum
+from common import DataSourceEnum, GeneralModelEnum
 
 ConfigType = Literal['base', 'smoke']
 
@@ -47,7 +47,7 @@ class OnlineConfig(BaseModel):
 
 
 class ViTConfig(BaseModel):
-    base_model_class: str = 'ViT'
+    general_model_class: str = 'ViT'
     patch_size: int = 8
     dim: int = 64
     depth: int = 1
@@ -58,16 +58,48 @@ class ViTConfig(BaseModel):
     channels: int = 1
 
 
+class TCNConfig(BaseModel):
+    general_model_class: str = 'TCN'
+    out_channels: int = 4
+    kernel_size: int = 2
+    channels: int = 1
+    layers: int = 1
+    bias: bool = True
+    classification_hidden_size: int = 128
+    classification_n_layers: int = 2
+
+
+class MLPConfig(BaseModel):
+    general_model_class: str = 'MLP'
+    classification_hidden_size: int = 128
+    classification_n_layers: int = 2
+
+
+def make_config(general_model_name, is_smoke = False):
+    if general_model_name == GeneralModelEnum.TCN:
+        return TCNConfig() if not is_smoke else TCNConfig(layers=1, classification_hidden_size=64, classification_n_layers=1)
+    elif general_model_name == GeneralModelEnum.ViT:
+        return ViTConfig() if not is_smoke else ViTConfig(patch_size=8, depth=1, heads=1, mlp_dim=4)
+    elif general_model_name == GeneralModelEnum.MLP:
+        return MLPConfig() if not is_smoke else MLPConfig(classification_hidden_size=64, classification_n_layers=1)
+    else:
+        print('Please chose model from', GeneralModelEnum.keys())
+
+
 class BaseConfig(BaseModel):
     config_type: str = 'base'
     data_source: DataSourceEnum = DataSourceEnum.MAD
     window_size: int = 200
+    num_channels: int = 8
     overlap: int = 150
     num_classes: int = 5
     random_seed: int = 100
     save_checkpoints: bool = False
 
-    general_model_config: ViTConfig = Field(default_factory=ViTConfig)
+    general_model_name: GeneralModelEnum = GeneralModelEnum.TCN
+
+    general_model_config: TCNConfig = make_config(general_model_name)
+    # general_model_config: TCNConfig = Field(default_factory=TCNConfig)
     pretrain: PretrainConfig = Field(default_factory=PretrainConfig)
     finetune: FinetuneConfig = Field(default_factory=FinetuneConfig)
     online: OnlineConfig = Field(default_factory=OnlineConfig)
@@ -88,9 +120,13 @@ class BaseConfig(BaseModel):
             enum_value = data['data_source'].split('.')[-1]
             data['data_source'] = DataSourceEnum[enum_value]
 
+        if 'general_model_name' in data and isinstance(data['general_model_name'], str):
+            enum_value = data['general_model_name'].split('.')[-1]
+            data['general_model_name'] = GeneralModelEnum[enum_value]
+
         super().__init__(**data)
         if self.sweep_config:
-            self.proc_num = 4
+            self.proc_num = 2
 
     def __str__(self):
         arg_str = pickle.dumps(self.dict())
@@ -104,8 +140,9 @@ class SmokeConfig(BaseConfig):
     # hostname: str = ""
     # sweep_config: str = ""
     data_source: DataSourceEnum = DataSourceEnum.MiniMAD
+    general_model_name: GeneralModelEnum = GeneralModelEnum.TCN
 
-    general_model_config: ViTConfig = Field(default_factory=lambda: ViTConfig(patch_size=8, depth=1, heads=1, mlp_dim=4))
+    general_model_config: TCNConfig = make_config(general_model_name, is_smoke=True) #Field(default_factory=lambda: ViTConfig(patch_size=8, depth=1, heads=1, mlp_dim=4))
     pretrain: PretrainConfig = Field(default_factory=lambda: PretrainConfig(epochs=1, batch_size=1, num_workers=0))
     finetune: FinetuneConfig = Field(default_factory=lambda: FinetuneConfig(num_episodes=2, epochs=2, num_workers=0))
     online: OnlineConfig = Field(default_factory=lambda: OnlineConfig(num_episodes=2, epochs=1, num_sessions=2, train_intervals=1,
