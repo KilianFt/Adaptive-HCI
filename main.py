@@ -24,6 +24,8 @@ def main():
         experiment_config = configs.BaseConfig()
     # experiment_config = configs.SmokeConfig()
 
+    os.system("wandb login --relogin")
+
     try:
         entity = "delvermm" if "delverm" in os.getlogin() else "kilian"
     except OSError:  # Happens on mila cluster
