@@ -25,7 +25,7 @@ def buddy_setup(exp_config: configs.BaseConfig, entity):
     esh = "\n".join(l.strip() for l in """
     #SBATCH --cpus-per-task=8
     #SBATCH --mem=64G
-    #SBATCH --time=12:00:00
+    #SBATCH --time=20:00:00
     #SBATCH --gres=gpu:32gb:1
         """.strip().split("\n")
                     ) + "\n"
