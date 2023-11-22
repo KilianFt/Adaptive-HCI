@@ -59,8 +59,9 @@ def main(model: LightningModule, user_hash, config: configs.BaseConfig) -> Light
     model.metric_prefix = f'{user_hash}/finetune/'
     model.step_count = 0
 
+    accelerator = 'cuda' if torch.cuda.is_available() else 'cpu'
     trainer = pl.Trainer(max_epochs=config.finetune.epochs, log_every_n_steps=1, logger=logger,
-                         enable_checkpointing=config.save_checkpoints)
+                         enable_checkpointing=config.save_checkpoints, accelerator=accelerator)
 
     trainer.fit(model=model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 
