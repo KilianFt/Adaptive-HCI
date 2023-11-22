@@ -61,7 +61,7 @@ parameters:
   online:
     parameters:
       num_episodes:
-        values: [ 1, 2, 3, 5 ]
+        values: [ 10, 20, 30 ]
       batch_size:
         values: [ 1, 2, 4, 8, 16 ]
       epochs:
