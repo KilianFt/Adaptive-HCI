@@ -99,19 +99,14 @@ def get_concatenated_user_episodes(episodes):
     rewards_list = [e['rewards'] for e in episodes]
 
     assert len(action_list) > 0, 'Action list empty: {action_list}'
-    assert len(optimal_actions_list) > 0, 'Action list empty: {action_list}'
+    assert len(optimal_actions_list) > 0, 'Optimal action list empty: {optimal_actions_list}'
+    assert len(observations_list) > 0, 'Observation list empty: {observations_list}'
+    assert len(rewards_list) > 0, 'Reward list empty: {rewards_list}'
 
-    # FIXME maybe remove try
-    try:
-        actions = np.concatenate(action_list).squeeze()
-        optimal_actions = np.concatenate(optimal_actions_list)
-        observations = np.concatenate(observations_list).squeeze()
-        rewards = np.concatenate(rewards_list).squeeze()
-    except:
-        print(f"Contents of action_list: {action_list}")
-        print(f"Contents of optimal_actions_list: {optimal_actions_list}")
-        print(f"Contents of observations: {observations_list}")
-        print(f"Contents of rewards: {rewards_list}")
+    actions = np.concatenate(action_list).squeeze()
+    optimal_actions = np.concatenate(optimal_actions_list)
+    observations = np.concatenate(observations_list).squeeze()
+    rewards = np.concatenate(rewards_list).squeeze()
 
     terminals = get_terminals(episodes, rewards)
 
@@ -487,7 +482,6 @@ def get_stored_sessions(stage: str, file_ids, num_episodes):
         print('Retrying to load files')
         time.sleep(torch.randint(1, 10, size=(1,)))
 
-        # try download again
         online_episodes_list = load_files(data_dir, filenames)
 
         assert len(online_episodes_list[0][0]['user_signals']) > 0, \
