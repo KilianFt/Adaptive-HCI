@@ -61,7 +61,8 @@ def main(model: LightningModule, user_hash, config: configs.BaseConfig) -> Light
 
     accelerator = 'cuda' if torch.cuda.is_available() else 'cpu'
     trainer = pl.Trainer(max_epochs=config.finetune.epochs, log_every_n_steps=1, logger=logger,
-                         enable_checkpointing=config.save_checkpoints, accelerator=accelerator)
+                         enable_checkpointing=config.save_checkpoints, accelerator=accelerator,
+                         gradient_clip_val=config.gradient_clip_val)
 
     trainer.fit(model=model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 

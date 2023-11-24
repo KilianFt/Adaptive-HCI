@@ -17,7 +17,7 @@ parameters:
       dim:
         values: [ 64, 128, 256 ]
       depth:
-        values: [ 1, 2, 3 ]
+        value: 1
       heads:
         values: [ 1, 2, 4 ]
       mlp_dim:
@@ -28,8 +28,8 @@ parameters:
         max: 0.25
       emb_dropout:
         distribution: uniform
-        min: 0.0
-        max: 0.15
+        min: 0.1
+        max: 0.3
   pretrain:
     parameters:
       epochs:
