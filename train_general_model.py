@@ -80,7 +80,8 @@ def main(logger, experiment_config: configs.BaseConfig) -> LightningModule:
     
     accelerator = 'cuda' if torch.cuda.is_available() else 'cpu'
     trainer = pl.Trainer(max_epochs=experiment_config.pretrain.epochs, log_every_n_steps=1, logger=pl_logger,
-                         enable_checkpointing=experiment_config.save_checkpoints, accelerator=accelerator)
+                         enable_checkpointing=experiment_config.save_checkpoints, accelerator=accelerator,
+                         gradient_clip_val=experiment_config.gradient_clip_val)
     trainer.fit(model=pl_model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 
     return pl_model

@@ -470,7 +470,11 @@ def get_stored_sessions(stage: str, file_ids, num_episodes):
     stage = pathlib.Path("Online" + stage)
     data_dir = base_data_dir / stage
 
-    filenames = maybe_download_drive_folder(data_dir, file_ids=file_ids)
+    # FIXME
+    # filenames = maybe_download_drive_folder(data_dir, file_ids=file_ids)
+    _destination_folder = data_dir.as_posix() + '/'
+    all_files = os.listdir(_destination_folder)
+    filenames = [file for file in all_files if file.endswith(".pkl")]
 
     if num_episodes is not None:
         filenames = filenames[:num_episodes]
@@ -493,6 +497,9 @@ def get_stored_sessions(stage: str, file_ids, num_episodes):
 def maybe_download_drive_folder(destination_folder, file_ids):
     _destination_folder = destination_folder.as_posix() + '/'
 
+    if not os.path.exists(_destination_folder):
+        os.makedirs(_destination_folder)
+
     all_files = os.listdir(_destination_folder)
     filenames = [file for file in all_files if file.endswith(".pkl")]
 
@@ -500,14 +507,10 @@ def maybe_download_drive_folder(destination_folder, file_ids):
         print("Folder already exists")
         return sorted(filenames)
 
-    if not os.path.exists(_destination_folder):
-        os.makedirs(_destination_folder)
-
     logging.info("Downloading files from Google Drive")
     for file_id in file_ids:
         cmd = f"gdown https://drive.google.com/uc?id={file_id} -O {_destination_folder}"
         subprocess.call(cmd, shell=True)
-
 
     all_files = os.listdir(_destination_folder)
     filenames = [file for file in all_files if file.endswith(".pkl")]
