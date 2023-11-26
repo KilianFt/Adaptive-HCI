@@ -11,11 +11,11 @@ from adaptive_hci.controllers import EMGViT, PLModel
 from common import DataSourceEnum
 
 
-def get_dataset_(config: configs.BaseConfig):
+def get_dataloaders(config: configs.BaseConfig):
     dataset = get_dataset(config)
-
-    train_dataset, test_dataset = random_split(dataset, [1 - config.pretrain.train_fraction, config.pretrain.train_fraction])
-
+    train_fraction = int(config.pretrain.train_fraction * len(dataset))
+    test_fraction = int(len(dataset) - train_fraction)
+    train_dataset, test_dataset = random_split(dataset, [train_fraction, test_fraction])
     dataloader_args = dict(batch_size=config.pretrain.batch_size, drop_last=False, num_workers=config.pretrain.num_workers)
 
     train_dataloader = DataLoader(train_dataset, shuffle=True, **dataloader_args)
@@ -24,7 +24,7 @@ def get_dataset_(config: configs.BaseConfig):
 
 
 @utils.disk_cache
-def get_dataset(config: configs.BaseConfig):
+def get_dataset(config: configs.BaseConfig) -> CombinedDataset:
     data_source = config.data_source
     assert data_source not in (DataSourceEnum.NINA_PRO,), "not implemented, use merged to include it"
 
@@ -59,19 +59,19 @@ def get_dataset(config: configs.BaseConfig):
 def main(logger, experiment_config: configs.BaseConfig) -> LightningModule:
     pl_logger = WandbLogger()
 
-    train_dataloader, val_dataloader, n_labels = get_dataset_(experiment_config)
+    train_dataloader, val_dataloader, n_labels = get_dataloaders(experiment_config)
 
     vit = EMGViT(
         image_size=experiment_config.window_size,
-        patch_size=experiment_config.base_model_config.patch_size,
+        patch_size=experiment_config.general_model_config.patch_size,
         num_classes=n_labels,
-        dim=experiment_config.base_model_config.dim,
-        depth=experiment_config.base_model_config.depth,
-        heads=experiment_config.base_model_config.heads,
-        mlp_dim=experiment_config.base_model_config.mlp_dim,
-        dropout=experiment_config.base_model_config.dropout,
-        emb_dropout=experiment_config.base_model_config.emb_dropout,
-        channels=experiment_config.base_model_config.channels,
+        dim=experiment_config.general_model_config.dim,
+        depth=experiment_config.general_model_config.depth,
+        heads=experiment_config.general_model_config.heads,
+        mlp_dim=experiment_config.general_model_config.mlp_dim,
+        dropout=experiment_config.general_model_config.dropout,
+        emb_dropout=experiment_config.general_model_config.emb_dropout,
+        channels=experiment_config.general_model_config.channels,
     )
 
     assert experiment_config.loss in ["MSELoss"], "Only MSELoss is supported for now"

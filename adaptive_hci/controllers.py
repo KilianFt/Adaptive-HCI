@@ -26,7 +26,7 @@ class PLModel(pl.LightningModule):
         self.exact_match = ExactMatch(task="multilabel", num_labels=n_labels, threshold=threshold)
         self.f1_score = F1Score(task="multilabel", num_labels=n_labels, threshold=threshold)
         self.accuracy_metric = Accuracy(task='binary')
-
+        self.step_count = 0
         if n_frozen_layers is not None:
             self.freeze_layers(n_frozen_layers)
 
@@ -53,6 +53,8 @@ class PLModel(pl.LightningModule):
         outputs = self.model(data)
         loss = self.criterion(outputs, targets)
         self.log(f"{self.metric_prefix}train/loss", loss)
+        self.log(f"{self.metric_prefix}train/step", self.step_count)
+        self.step_count += 1
         return loss
 
     def get_per_label_accuracies(self, outputs, targets):
@@ -79,6 +81,7 @@ class PLModel(pl.LightningModule):
         self.log(f'{self.metric_prefix}validation/loss', val_loss, prog_bar=True)
         self.log(f'{self.metric_prefix}validation/acc', val_acc, prog_bar=True)
         self.log(f'{self.metric_prefix}validation/f1', val_f1, prog_bar=True)
+        self.log(f'{self.metric_prefix}validation/step', self.step_count, prog_bar=True)
 
         per_label_accuracies = self.get_per_label_accuracies(outputs, targets)
         for label_idx, per_label_acc in enumerate(per_label_accuracies):

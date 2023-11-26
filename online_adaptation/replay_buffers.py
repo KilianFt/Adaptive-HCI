@@ -14,7 +14,7 @@ class ReplayBuffer(Dataset):
 
     def add(self, observation: torch.Tensor, action: torch.Tensor):
         assert (action.long() == action).all(), "Actions must be integers"
-        targets = action.argwhere().flatten().tolist()
+        targets = torch.nonzero(action).flatten().tolist()
         for target in targets:
             self.buffers[target].append(observation)
 

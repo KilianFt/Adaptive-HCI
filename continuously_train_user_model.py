@@ -1,15 +1,14 @@
 import argparse
-import collections
 import hashlib
-import os
 import re
-import pathlib
 import random
+from typing import Tuple, Dict, List
 
 import lightning.pytorch as pl
 import numpy as np
 import torch
 import wandb
+from lightning import Trainer
 from lightning.pytorch import LightningModule
 from lightning.pytorch.loggers import WandbLogger
 from torch.utils.data import DataLoader
@@ -18,22 +17,14 @@ import configs
 from adaptive_hci import datasets
 from adaptive_hci.controllers import PLModel
 from adaptive_hci.datasets import to_tensor_dataset
-from adaptive_hci.utils import maybe_download_drive_folder
+from adaptive_hci.datasets import get_stored_sessions
 from online_adaptation import replay_buffers
 
-file_ids = [
+adaptation_file_ids = [
     "1-ZARLHsK1k958Bk2-mlQdrRblLreM8_j",
     "1-jjFfGdP5Y8lUk6_prdUSdRmpfEH0W3w",
     "1-hCAag7xc3_l7u8bHUfUNOTe0j95ZGrz",
 ]
-
-
-def get_stored_sessions(config):
-    online_data_dir = pathlib.Path('datasets/OnlineAdaptation')
-    maybe_download_drive_folder(online_data_dir, file_ids=file_ids)
-    episode_filenames = sorted(os.listdir(online_data_dir))
-    online_sessions = datasets.load_online_episodes(online_data_dir, episode_filenames, config.online.num_sessions)
-    return online_sessions
 
 
 def sweep_wrapper():
@@ -71,7 +62,7 @@ def prepare_data(ep_idx, config, all_episodes, episode_metrics):
     return to_tensor_dataset(train_observations, train_actions)
 
 
-def validate_model(trainer, pl_model, val_dataset, config):
+def validate_model(trainer: Trainer, pl_model, val_dataset, config):
     val_dataloader = DataLoader(val_dataset, batch_size=config.online.batch_size,
                                 num_workers=config.online.num_workers)
     hist, = trainer.validate(model=pl_model, dataloaders=val_dataloader)
@@ -84,7 +75,7 @@ def train_model(trainer, pl_model, train_dataset, config):
     trainer.fit(model=pl_model, train_dataloaders=train_dataloader)
 
 
-def process_session(config, current_trial_episodes, logger, pl_model, session_idx):
+def process_session(config, current_trial_episodes, logger, pl_model):
     all_episodes, num_classes = datasets.get_rl_dataset(current_trial_episodes, config.online.num_episodes)
     replay_buffer = replay_buffers.ReplayBuffer(max_size=1_000, num_classes=num_classes)
     trainer = pl.Trainer(max_epochs=0, log_every_n_steps=1, logger=logger,
@@ -103,25 +94,31 @@ def process_session(config, current_trial_episodes, logger, pl_model, session_id
             if len(replay_buffer) > 0:
                 train_model(trainer, pl_model, replay_buffer, config)
 
+    validation_metrics = validate_model(trainer, pl_model, val_dataset, config)
+    return validation_metrics
 
-def main(pl_model: LightningModule, user_hash, config: configs.BaseConfig) -> LightningModule:
+
+def main(pl_model: LightningModule, user_hash, config: configs.BaseConfig) -> Tuple[LightningModule, List[Dict[str, int]]]:
     if config is None:
         config = wandb.config
 
     pl_model.freeze_layers(config.online.n_frozen_layers)
     pl_model.lr = config.online.lr
+    pl_model.step_count = 0
 
     logger = WandbLogger(project='adaptive_hci', tags=["online_adaptation", user_hash],
-                         config=config, name=f"online_adapt_{config}_{user_hash[:15]}")
+                         config=config, name=f"online_adapt_{config}_{user_hash}")
 
-    online_sessions = get_stored_sessions(config)
+    online_sessions = get_stored_sessions(stage="Adaptation", file_ids=adaptation_file_ids, num_episodes=config.online.num_sessions)
 
+    valid_metrics = []
     for session_idx, current_trial_episodes in enumerate(online_sessions):
         pl_model.metric_prefix = f'{user_hash}/continous/session_{session_idx}/'
-        process_session(config, current_trial_episodes, logger, pl_model, session_idx)
+        session_metrics = process_session(config, current_trial_episodes, logger, pl_model)
+        valid_metrics.append(session_metrics)
 
     wandb.run.log({}, commit=True)
-    return pl_model
+    return pl_model, valid_metrics
 
 
 if __name__ == '__main__':
