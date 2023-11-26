@@ -104,6 +104,7 @@ def main(pl_model: LightningModule, user_hash, config: configs.BaseConfig) -> Tu
 
     pl_model.freeze_layers(config.online.n_frozen_layers)
     pl_model.lr = config.online.lr
+    pl_model.step_count = 0
 
     logger = WandbLogger(project='adaptive_hci', tags=["online_adaptation", user_hash],
                          config=config, name=f"online_adapt_{config}_{user_hash}")

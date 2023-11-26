@@ -57,6 +57,7 @@ def main(model: LightningModule, user_hash, config: configs.BaseConfig) -> Light
     model.lr = config.finetune.lr
     model.freeze_layers(config.finetune.n_frozen_layers)
     model.metric_prefix = f'{user_hash}/finetune/'
+    model.step_count = 0
 
     trainer = pl.Trainer(max_epochs=config.finetune.epochs, log_every_n_steps=1, logger=logger,
                          enable_checkpointing=config.save_checkpoints)
