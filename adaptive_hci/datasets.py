@@ -1,6 +1,9 @@
 import dataclasses
+import logging
 import os
+import pathlib
 import pickle
+import subprocess
 import time
 
 import numpy as np
@@ -11,6 +14,12 @@ from torch.utils.data import TensorDataset
 
 from common import DataSourceEnum
 from .utils import labels_to_onehot, predictions_to_onehot
+
+is_slurm_job = os.environ.get("SLURM_JOB_ID") is not None
+if is_slurm_job:
+    base_data_dir = pathlib.Path('/home/mila/d/delvermm/scratch/adaptive_hci/datasets/')
+else:
+    base_data_dir = pathlib.Path('datasets/')
 
 gesture_names = [
     "rest",
@@ -68,21 +77,6 @@ def to_tensor_dataset(train_observations, train_actions):
     return ds
 
 
-def load_online_episodes(base_dir, filenames, num_episodes):
-    online_episodes_list = []
-
-    if num_episodes is not None:
-        filenames = filenames[:num_episodes]
-
-    for filename in filenames:
-        filepath = base_dir / filename
-        with open(filepath, 'rb') as f:
-            episodes = pickle.load(f)
-            online_episodes_list.append(episodes)
-
-    return online_episodes_list
-
-
 def get_terminals(episodes, rewards):
     terminals = np.zeros(rewards.shape[0])
     last_terminal_idx = 0
@@ -94,11 +88,25 @@ def get_terminals(episodes, rewards):
 
 
 def get_concatenated_user_episodes(episodes):
-    actions = np.concatenate([predictions_to_onehot(e['actions'].detach().numpy()) for e in episodes]).squeeze()
+    assert len(episodes) > 0, 'Episodes empty'
 
-    optimal_actions = np.concatenate([e['optimal_actions'].detach().numpy() for e in episodes])
-    observations = np.concatenate([e['user_signals'] for e in episodes]).squeeze()
-    rewards = np.concatenate([e['rewards'] for e in episodes]).squeeze()
+    # seem to be a problem in sweeps to create list and concatenate them in one line
+    # thus we wirst need to create a list and then concatenate (it always fails on the first occasion of np.concat([...]))
+    # not on np.concat(my_list)
+    action_list = [predictions_to_onehot(e['actions'].detach().numpy()) for e in episodes]
+    optimal_actions_list = [e['optimal_actions'].detach().numpy() for e in episodes]
+    observations_list = [e['user_signals'] for e in episodes]
+    rewards_list = [e['rewards'] for e in episodes]
+
+    assert len(action_list) > 0, 'Action list empty: {action_list}'
+    assert len(optimal_actions_list) > 0, 'Optimal action list empty: {optimal_actions_list}'
+    assert len(observations_list) > 0, 'Observation list empty: {observations_list}'
+    assert len(rewards_list) > 0, 'Reward list empty: {rewards_list}'
+
+    actions = np.concatenate(action_list).squeeze()
+    optimal_actions = np.concatenate(optimal_actions_list)
+    observations = np.concatenate(observations_list).squeeze()
+    rewards = np.concatenate(rewards_list).squeeze()
 
     terminals = get_terminals(episodes, rewards)
 
@@ -261,7 +269,6 @@ def get_mad_windows_dataset(mad_base_dir, _, window_length, overlap):
             mad_labels = np.concatenate((mad_labels, subject_labels))
 
     mad_onehot_labels = np.array([labels_to_onehot(label) for label in mad_labels])
-
     print("MAD dataset loaded")
     return mad_windows, mad_onehot_labels
 
@@ -445,3 +452,65 @@ class CombinedDataset(data.Dataset):
     def num_unique_labels(self):
         assert self.dataset1.labels.shape[1] == self.dataset2.labels.shape[1], 'labels of both datasets must match'
         return self.dataset1.labels.shape[1]
+
+
+def load_files(data_dir, filenames):
+    online_episodes_list = []
+ 
+    for filename in filenames:
+        filepath = data_dir / filename
+        with open(filepath, 'rb') as f:
+            episodes = pickle.load(f)
+            online_episodes_list.append(episodes)
+
+    return online_episodes_list
+
+
+def get_stored_sessions(stage: str, file_ids, num_episodes):
+    stage = pathlib.Path("Online" + stage)
+    data_dir = base_data_dir / stage
+
+    filenames = maybe_download_drive_folder(data_dir, file_ids=file_ids)
+
+    if num_episodes is not None:
+        filenames = filenames[:num_episodes]
+
+    online_episodes_list = load_files(data_dir, filenames)
+
+    # check if episodes contain information
+    if not online_episodes_list or len(online_episodes_list[0][0]['user_signals']) == 0:
+        print('Retrying to load files')
+        time.sleep(torch.randint(1, 10, size=(1,)))
+
+        online_episodes_list = load_files(data_dir, filenames)
+
+        assert len(online_episodes_list[0][0]['user_signals']) > 0, \
+            f"Could not load episode files in {data_dir}\n filenames {filenames}"
+
+    return online_episodes_list
+
+
+def maybe_download_drive_folder(destination_folder, file_ids):
+    _destination_folder = destination_folder.as_posix() + '/'
+
+    if not os.path.exists(_destination_folder):
+        os.makedirs(_destination_folder)
+
+    all_files = os.listdir(_destination_folder)
+    filenames = [file for file in all_files if file.endswith(".pkl")]
+
+    if os.path.exists(_destination_folder) and len(filenames) == len(file_ids):
+        print("Folder already exists")
+        return sorted(filenames)
+
+    logging.info("Downloading files from Google Drive")
+    for file_id in file_ids:
+        cmd = f"gdown https://drive.google.com/uc?id={file_id} -O {_destination_folder}"
+        subprocess.call(cmd, shell=True)
+
+    all_files = os.listdir(_destination_folder)
+    filenames = [file for file in all_files if file.endswith(".pkl")]
+
+    assert len(filenames) == len(file_ids), 'Not all files exist {filenames}'
+
+    return sorted(filenames)

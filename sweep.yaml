@@ -1,0 +1,84 @@
+program: main.py
+command:
+  - ${env}
+  - ${interpreter}
+  - -O
+  - ${program}
+  - ${args}
+metric:
+  name: population/mean_f1
+  goal: maximize
+method: bayes
+parameters:
+  general_model_config:
+    parameters:
+      patch_size:
+        values: [ 2, 4, 8 ]
+      dim:
+        values: [ 64, 128, 256 ]
+      depth:
+        values: [ 1, 2, 3 ]
+      heads:
+        values: [ 1, 2, 4 ]
+      mlp_dim:
+        values: [ 128, 256, 512 ]
+      dropout:
+        distribution: uniform
+        min: 0.1
+        max: 0.25
+      emb_dropout:
+        distribution: uniform
+        min: 0.0
+        max: 0.15
+  pretrain:
+    parameters:
+      epochs:
+        values: [ 4, 8, 16 ]
+      batch_size:
+        values: [ 1, 2, 4, 8, 16 ]
+      lr:
+        distribution: log_uniform_values
+        min: 0.00005
+        max: 0.001
+      train_fraction:
+        distribution: uniform
+        min: 0.5
+        max: 0.9
+  finetune:
+    parameters:
+      n_frozen_layers:
+        values: [ 0, 1, 2, 3, 4 ]
+      num_episodes:
+        values: [ 1, 5, 10 ]
+      epochs:
+        values: [ 1, 2, 3, 4, 5 ]
+      lr:
+        distribution: log_uniform_values
+        min: 0.0001
+        max: 0.01
+      batch_size:
+        values: [ 1, 2, 4, 8, 16 ]
+  online:
+    parameters:
+      num_episodes:
+        values: [ 1, 10, 20, 30 ]
+      batch_size:
+        values: [ 1, 2, 4, 8, 16 ]
+      epochs:
+        values: [ 1, 5, 10 ]
+      lr:
+        distribution: log_uniform_values
+        min: 0.0001
+        max: 0.01
+      num_sessions:
+        values: [ 1, 2, 3 ]
+      n_frozen_layers:
+        values: [ 0, 1, 2, 3, 4 ]
+      train_intervals:
+        values: [ 1, 2, 3, 4, 5 ]
+      first_training_episode:
+        values: [ 0, 1, 2, 3, 4 ]
+      additional_train_episodes:
+        values: [ 1, 2, 3, 4, 5 ]
+      adaptive_training:
+        values: [ True, False ]
