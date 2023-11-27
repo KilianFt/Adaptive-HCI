@@ -21,7 +21,6 @@ class PretrainConfig(BaseModel):
     lr: float = 0.0007
     train_fraction: float = Field(0.8, description="% of the data for training")
     num_workers: int = 8
-    gradient_clip_val: float = 0.5
 
 
 class FinetuneConfig(BaseModel):
@@ -31,7 +30,6 @@ class FinetuneConfig(BaseModel):
     lr: float = 0.005
     batch_size: int = 32
     num_workers: int = 8
-    gradient_clip_val: float = 0.5
 
 
 class OnlineConfig(BaseModel):
@@ -46,7 +44,6 @@ class OnlineConfig(BaseModel):
     additional_train_episodes: int = 4
     adaptive_training: bool = True
     num_workers: int = 8
-    gradient_clip_val: float = 0.5
 
 
 class ViTConfig(BaseModel):
@@ -69,6 +66,7 @@ class BaseConfig(BaseModel):
     num_classes: int = 5
     random_seed: int = 100
     save_checkpoints: bool = False
+    gradient_clip_val: float = 0.5
 
     general_model_config: ViTConfig = Field(default_factory=ViTConfig)
     pretrain: PretrainConfig = Field(default_factory=PretrainConfig)
