@@ -22,6 +22,7 @@ def main():
         experiment_config = configs.SmokeConfig()
     else:
         experiment_config = configs.BaseConfig()
+    experiment_config = configs.SmokeConfig()
 
     try:
         entity = "delvermm" if "delverm" in os.getlogin() else "kilian"

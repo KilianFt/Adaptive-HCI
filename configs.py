@@ -49,7 +49,7 @@ class OnlineConfig(BaseModel):
 class ViTConfig(BaseModel):
     base_model_class: str = 'ViT'
     patch_size: int = 8
-    dim: int = 64
+    dim: int = 128
     depth: int = 1
     heads: int = 2
     mlp_dim: int = 128
@@ -91,7 +91,7 @@ class BaseConfig(BaseModel):
 
         super().__init__(**data)
         if self.sweep_config:
-            self.proc_num = 4
+            self.proc_num = 1
 
     def __str__(self):
         arg_str = pickle.dumps(self.dict())
