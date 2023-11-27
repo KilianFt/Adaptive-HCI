@@ -33,6 +33,8 @@ class PLModel(pl.LightningModule):
     def freeze_layers(self, n_frozen_layers: int) -> None:
         # reset grad
         for param in self.model.parameters():
+            # TODO: I'm afraid this will enable gradients for layers that were not meant to have them
+            # (e.g. the embeddings)
             param.requires_grad = True
 
         # freeze desired ones
@@ -66,7 +68,7 @@ class PLModel(pl.LightningModule):
         per_labels_accuracies = []
 
         for label_idx in range(num_targets):
-            label_acc = self.accuracy_metric(binary_outputs[:,label_idx], binary_targets[:,label_idx])
+            label_acc = self.accuracy_metric(binary_outputs[:, label_idx], binary_targets[:, label_idx])
             per_labels_accuracies.append(label_acc)
 
         return torch.tensor(per_labels_accuracies)
