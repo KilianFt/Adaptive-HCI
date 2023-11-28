@@ -13,7 +13,7 @@ parameters:
   general_model_config:
     parameters:
       patch_size:
-        value: 8
+        values: [ 2, 4, 8 ]
       dim:
         value: 128
       depth:
@@ -21,54 +21,47 @@ parameters:
       heads:
         value: 2
       mlp_dim:
-        value: 128
+        values: [ 128, 256, 512 ]
       dropout:
-        value: 0.16
-        # distribution: uniform
-        # min: 0.1
-        # max: 0.25
+        distribution: uniform
+        min: 0.1
+        max: 0.25
       emb_dropout:
-        value: 0.15
-        # distribution: uniform
-        # min: 0.1
-        # max: 0.3
+        distribution: uniform
+        min: 0.1
+        max: 0.3
   pretrain:
     parameters:
       epochs:
         value: 16
       batch_size:
-        value: 16
+        values: [ 4, 8, 16 ]
       lr:
-        value: 0.0002
-        # distribution: log_uniform_values
-        # min: 0.00005
-        # max: 0.0005
+        distribution: log_uniform_values
+        min: 0.00005
+        max: 0.0005
       train_fraction:
-        value: 0.7
-        # distribution: uniform
-        # min: 0.5
-        # max: 0.9
+        distribution: uniform
+        min: 0.5
+        max: 0.9
   finetune:
     parameters:
       n_frozen_layers:
         values: [ 0, 1, 2 ]
       num_episodes:
-        value: 10
-        # values: [ 1, 5, 10 ]
+        values: [ 1, 5, 10 ]
       epochs:
         values: [ 1, 5, 10 ]
       lr:
         distribution: log_uniform_values
         min: 0.0001
-        max: 0.005
+        max: 0.01
       batch_size:
-        value: 16
-        # values: [ 1, 2, 4, 8, 16 ]
+        values: [ 1, 2, 4, 8, 16 ]
   online:
     parameters:
       num_episodes:
-        value: 30
-        # values: [ 1, 10, 20, 30 ]
+        values: [ 1, 10, 20, 30 ]
       batch_size:
         values: [ 1, 2, 4, 8, 16 ]
       epochs:
@@ -76,10 +69,9 @@ parameters:
       lr:
         distribution: log_uniform_values
         min: 0.0001
-        max: 0.001
+        max: 0.01
       num_sessions:
-        value: 3
-        # values: [ 1, 2, 3 ]
+        values: [ 1, 2, 3 ]
       n_frozen_layers:
         values: [ 0, 1, 2 ]
       train_intervals:
@@ -90,7 +82,3 @@ parameters:
         values: [ 1, 2, 3, 4, 5 ]
       adaptive_training:
         values: [ True, False ]
-      balance_classes:
-        values: [ True, False ]
-      buffer_size:
-        values: [ 500, 1_000, 2_000 ]

@@ -20,6 +20,7 @@ from adaptive_hci.datasets import to_tensor_dataset, get_stored_sessions
 from adaptive_hci import utils
 from online_adaptation import replay_buffers
 
+
 adaptation_file_ids = [
     "1-ZARLHsK1k958Bk2-mlQdrRblLreM8_j",
     "1-jjFfGdP5Y8lUk6_prdUSdRmpfEH0W3w",
@@ -91,7 +92,7 @@ def process_session(config, current_trial_episodes, logger, pl_model):
     accelerator = utils.get_accelerator(config.config_type)
     trainer = pl.Trainer(max_epochs=0, log_every_n_steps=1, logger=logger,
                          enable_checkpointing=config.save_checkpoints, accelerator=accelerator,
-                         gradient_clip_val=config.gradient_clip_va)
+                         gradient_clip_val=config.gradient_clip_val)
 
     for ep_idx, rollout in enumerate(all_episodes):
         trainer.fit_loop.max_epochs += config.online.epochs

@@ -45,8 +45,8 @@ class OnlineConfig(BaseModel):
     adaptive_training: bool = True
     num_workers: int = 8
 
-    balance_classes = True
-    buffer_size = 1_000
+    balance_classes: bool = True
+    buffer_size: int = 1_000
 
 class ViTConfig(BaseModel):
     base_model_class: str = 'ViT'
@@ -93,7 +93,7 @@ class BaseConfig(BaseModel):
 
         super().__init__(**data)
         if self.sweep_config:
-            self.proc_num = 4
+            self.proc_num = 8
 
     def __str__(self):
         arg_str = pickle.dumps(self.dict())
