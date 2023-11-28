@@ -10,6 +10,8 @@ from torch.utils.data import DataLoader
 
 import configs
 from adaptive_hci.datasets import get_concatenated_user_episodes, to_tensor_dataset, get_stored_sessions
+from adaptive_hci import utils
+
 
 finetune_user_ids = [
     "1Sitb0ooo2izvkHQGNQkXTGoDV4CJAnFF",
@@ -51,9 +53,10 @@ def main(model: LightningModule, user_hash, config: configs.BaseConfig) -> Light
     model.metric_prefix = f'{user_hash}/finetune/'
     model.step_count = 0
 
-    accelerator = 'cuda' if torch.cuda.is_available() else 'cpu'
+    accelerator = utils.get_accelerator(config.config_type)
     trainer = pl.Trainer(max_epochs=config.finetune.epochs, log_every_n_steps=1, logger=logger,
-                         enable_checkpointing=config.save_checkpoints, accelerator=accelerator)
+                         enable_checkpointing=config.save_checkpoints, accelerator=accelerator,
+                         gradient_clip_val=config.gradient_clip_val)
 
     trainer.fit(model=model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 

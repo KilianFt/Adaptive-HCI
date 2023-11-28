@@ -48,7 +48,6 @@ class OnlineConfig(BaseModel):
     balance_classes = True
     buffer_size = 1_000
 
-
 class ViTConfig(BaseModel):
     base_model_class: str = 'ViT'
     patch_size: int = 8
@@ -69,6 +68,7 @@ class BaseConfig(BaseModel):
     num_classes: int = 5
     random_seed: int = 100
     save_checkpoints: bool = False
+    gradient_clip_val: float = 0.5
 
     general_model_config: ViTConfig = Field(default_factory=ViTConfig)
     pretrain: PretrainConfig = Field(default_factory=PretrainConfig)

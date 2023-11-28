@@ -4,6 +4,19 @@ import pickle
 from functools import wraps
 
 import numpy as np
+import torch
+
+
+def get_accelerator(config_type):
+    accelerator = 'cuda'
+    if config_type == 'smoke':
+        accelerator = 'cpu'
+    else:
+        if not torch.cuda.is_available():
+            raise RuntimeError('Cuda not found')
+        accelerator = 'cuda'
+
+    return accelerator
 
 def labels_to_onehot(label):
     onehot = np.zeros(5)

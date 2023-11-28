@@ -456,7 +456,7 @@ class CombinedDataset(data.Dataset):
 
 def load_files(data_dir, filenames):
     online_episodes_list = []
- 
+
     for filename in filenames:
         filepath = data_dir / filename
         with open(filepath, 'rb') as f:
@@ -493,6 +493,9 @@ def get_stored_sessions(stage: str, file_ids, num_episodes):
 def maybe_download_drive_folder(destination_folder, file_ids):
     _destination_folder = destination_folder.as_posix() + '/'
 
+    if not os.path.exists(_destination_folder):
+        os.makedirs(_destination_folder)
+
     all_files = os.listdir(_destination_folder)
     filenames = [file for file in all_files if file.endswith(".pkl")]
 
@@ -500,14 +503,10 @@ def maybe_download_drive_folder(destination_folder, file_ids):
         print("Folder already exists")
         return sorted(filenames)
 
-    if not os.path.exists(_destination_folder):
-        os.makedirs(_destination_folder)
-
     logging.info("Downloading files from Google Drive")
     for file_id in file_ids:
         cmd = f"gdown https://drive.google.com/uc?id={file_id} -O {_destination_folder}"
         subprocess.call(cmd, shell=True)
-
 
     all_files = os.listdir(_destination_folder)
     filenames = [file for file in all_files if file.endswith(".pkl")]

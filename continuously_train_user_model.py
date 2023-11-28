@@ -16,8 +16,8 @@ from torch.utils.data import DataLoader
 import configs
 from adaptive_hci import datasets
 from adaptive_hci.controllers import PLModel
-from adaptive_hci.datasets import to_tensor_dataset
-from adaptive_hci.datasets import get_stored_sessions
+from adaptive_hci.datasets import to_tensor_dataset, get_stored_sessions
+from adaptive_hci import utils
 from online_adaptation import replay_buffers
 
 adaptation_file_ids = [
@@ -88,9 +88,10 @@ def process_session(config, current_trial_episodes, logger, pl_model):
             num_classes=num_classes
         )
 
-    accelerator = 'cuda' if torch.cuda.is_available() else 'cpu'
+    accelerator = utils.get_accelerator(config.config_type)
     trainer = pl.Trainer(max_epochs=0, log_every_n_steps=1, logger=logger,
-                         enable_checkpointing=config.save_checkpoints, accelerator=accelerator)
+                         enable_checkpointing=config.save_checkpoints, accelerator=accelerator,
+                         gradient_clip_val=config.gradient_clip_va)
 
     for ep_idx, rollout in enumerate(all_episodes):
         trainer.fit_loop.max_epochs += config.online.epochs
