@@ -33,11 +33,11 @@ class FinetuneConfig(BaseModel):
 
 
 class OnlineConfig(BaseModel):
-    num_episodes: Optional[int] = None
+    num_episodes: Optional[int] = 1
     batch_size: int = 16
-    epochs: int = 9
+    epochs: int = 2
     lr: float = 3.5e-3
-    num_sessions: Optional[int] = None
+    num_sessions: Optional[int] = 1
     n_frozen_layers: int = 2
     train_intervals: int = 4
     first_training_episode: int = 0
@@ -45,8 +45,8 @@ class OnlineConfig(BaseModel):
     adaptive_training: bool = True
     num_workers: int = 8
 
-    balance_classes = True
-    buffer_size = 1_000
+    balance_classes: bool = True
+    buffer_size: int = 1_000
 
 class ViTConfig(BaseModel):
     base_model_class: str = 'ViT'
@@ -93,7 +93,7 @@ class BaseConfig(BaseModel):
 
         super().__init__(**data)
         if self.sweep_config:
-            self.proc_num = 4
+            self.proc_num = 8
 
     def __str__(self):
         arg_str = pickle.dumps(self.dict())
