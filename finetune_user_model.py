@@ -22,6 +22,10 @@ finetune_user_ids = [
 
 
 def main(model: LightningModule, user_hash, config: configs.BaseConfig) -> LightningModule:
+    if not config.finetune.do_finetuning:
+        print('Skip finetuning')
+        return model
+
     logger = WandbLogger(project='adaptive_hci', tags=["finetune", user_hash], config=config,
                          name=f"finetune_{config}_{user_hash[:15]}")
 
@@ -31,8 +35,8 @@ def main(model: LightningModule, user_hash, config: configs.BaseConfig) -> Light
     for ep in episode_list[:-1]:
         train_episodes += ep
 
-    if config.finetune.num_episodes is not None:
-        train_episodes = train_episodes[:1]  # Why do we only take the first episode?
+    # if config.finetune.num_episodes is not None:
+    #     train_episodes = train_episodes[:1]  # Why do we only take the first episode?
 
     val_episodes = episode_list[-1]
 
