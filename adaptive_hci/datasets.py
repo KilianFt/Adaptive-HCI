@@ -137,7 +137,7 @@ def split_by_terminal(observations, actions, rewards, terminals):
     return episodes
 
 
-def get_rl_dataset(current_trial_episodes, online_num_episodes):
+def get_rl_dataset(current_trial_episodes, online_num_episodes = None):
     (observations, _, optimal_actions, rewards, terminals) = get_concatenated_user_episodes(current_trial_episodes)
 
     all_episodes = split_by_terminal(observations, optimal_actions, rewards, terminals)
@@ -466,7 +466,7 @@ def load_files(data_dir, filenames):
     return online_episodes_list
 
 
-def get_stored_sessions(stage: str, file_ids, num_episodes):
+def get_stored_sessions(stage: str, file_ids, num_episodes = None):
     stage = pathlib.Path("Online" + stage)
     data_dir = base_data_dir / stage
 

@@ -11,6 +11,10 @@ import finetune_user_model
 import continuously_train_user_model
 from deployment.buddy import buddy_setup
 
+# FIXME
+import torch
+torch.autograd.set_detect_anomaly(True)
+
 train_users = [
     hashlib.sha256("Kilian".encode("utf-8")).hexdigest()[:15],
     # hashlib.sha256("Manuel".encode("utf-8")).hexdigest()[:15],
