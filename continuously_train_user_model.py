@@ -20,6 +20,7 @@ from adaptive_hci.datasets import to_tensor_dataset, get_stored_sessions
 from adaptive_hci import utils
 from online_adaptation import replay_buffers
 
+
 adaptation_file_ids = [
     "1-ZARLHsK1k958Bk2-mlQdrRblLreM8_j",
     "1-jjFfGdP5Y8lUk6_prdUSdRmpfEH0W3w",
@@ -75,8 +76,14 @@ def train_model(trainer, pl_model, train_dataset, config):
     trainer.fit(model=pl_model, train_dataloaders=train_dataloader)
 
 
-def process_session(config, current_trial_episodes, logger, pl_model):
-    all_episodes, num_classes = datasets.get_rl_dataset(current_trial_episodes, config.online.num_episodes)
+def process_session(config, current_trial_episodes, logger, pl_model, do_training):
+    all_episodes, num_classes = datasets.get_rl_dataset(current_trial_episodes)#, config.online.num_episodes)
+
+    if do_training:
+        do_training_episodes = [i < config.online.num_episodes for i, _ in enumerate(all_episodes)]
+    else:
+        do_training_episodes = [False for _ in all_episodes]
+
     if config.online.balance_classes:
         replay_buffer = replay_buffers.ClassBalancingReplayBuffer(
             max_size=config.online.buffer_size,
@@ -91,15 +98,18 @@ def process_session(config, current_trial_episodes, logger, pl_model):
     accelerator = utils.get_accelerator(config.config_type)
     trainer = pl.Trainer(max_epochs=0, log_every_n_steps=1, logger=logger,
                          enable_checkpointing=config.save_checkpoints, accelerator=accelerator,
-                         gradient_clip_val=config.gradient_clip_va)
+                         gradient_clip_val=config.gradient_clip_val)
 
-    for ep_idx, rollout in enumerate(all_episodes):
+    session_val_metrics_list = []
+
+    for ep_idx, (rollout, is_train_episode) in enumerate(zip(all_episodes, do_training_episodes)):
         trainer.fit_loop.max_epochs += config.online.epochs
 
         val_dataset = to_tensor_dataset(rollout.observations, rollout.actions)
         validation_metrics = validate_model(trainer, pl_model, val_dataset, config)
+        session_val_metrics_list.append(validation_metrics)
 
-        if ep_idx >= config.online.first_training_episode and ep_idx % config.online.train_intervals == 0:
+        if is_train_episode and ep_idx >= config.online.first_training_episode and ep_idx % config.online.train_intervals == 0:
             train_dataset = prepare_data(ep_idx, config, all_episodes, validation_metrics)
             replay_buffer.extend(train_dataset)
 
@@ -107,7 +117,9 @@ def process_session(config, current_trial_episodes, logger, pl_model):
                 train_model(trainer, pl_model, replay_buffer, config)
 
     validation_metrics = validate_model(trainer, pl_model, val_dataset, config)
-    return validation_metrics
+    session_val_metrics_list.append(validation_metrics)
+
+    return session_val_metrics_list
 
 
 def main(pl_model: LightningModule, user_hash, config: configs.BaseConfig) -> Tuple[LightningModule, List[Dict[str, int]]]:
@@ -120,14 +132,16 @@ def main(pl_model: LightningModule, user_hash, config: configs.BaseConfig) -> Tu
     logger = WandbLogger(project='adaptive_hci', tags=["online_adaptation", user_hash],
                          config=config, name=f"online_adapt_{config}_{user_hash}")
 
-    online_sessions = get_stored_sessions(stage="Adaptation", file_ids=adaptation_file_ids, num_episodes=config.online.num_sessions)
+    online_sessions = get_stored_sessions(stage="Adaptation", file_ids=adaptation_file_ids)#, num_episodes=config.online.num_sessions)
+
+    do_training_list = [i < config.online.num_sessions for i, _ in enumerate(online_sessions)]
 
     valid_metrics = []
-    for session_idx, current_trial_episodes in enumerate(online_sessions):
+    for session_idx, (current_trial_episodes, do_training) in enumerate(zip(online_sessions, do_training_list)):
         pl_model.metric_prefix = f'{user_hash}/continous/session_{session_idx}/'
         pl_model.step_count = 0
-        session_metrics = process_session(config, current_trial_episodes, logger, pl_model)
-        valid_metrics.append(session_metrics)
+        session_metrics = process_session(config, current_trial_episodes, logger, pl_model, do_training)
+        valid_metrics += session_metrics
 
     wandb.run.log({}, commit=True)
     return pl_model, valid_metrics
