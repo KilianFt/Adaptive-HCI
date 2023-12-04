@@ -21,32 +21,32 @@ class PretrainConfig(BaseModel):
     lr: float = 0.0007
     train_fraction: float = Field(0.8, description="% of the data for training")
     num_workers: int = 8
+    do_pretraining: bool = True
 
 
 class FinetuneConfig(BaseModel):
-    n_frozen_layers: int = 2
+    n_frozen_layers: int = 1
     num_episodes: Optional[int] = None
-    epochs: int = 50
+    epochs: int = 15
     lr: float = 0.005
-    batch_size: int = 32
+    batch_size: int = 16
     num_workers: int = 8
     do_finetuning: bool = False
 
 class OnlineConfig(BaseModel):
-    num_episodes: Optional[int] = 1
-    batch_size: int = 16
-    epochs: int = 2
-    lr: float = 3.5e-3
-    num_sessions: Optional[int] = 1
-    n_frozen_layers: int = 2
-    train_intervals: int = 4
+    num_episodes: Optional[int] = 30
+    batch_size: int = 1
+    epochs: int = 20
+    lr: float = 0.00016
+    num_sessions: Optional[int] = 3
+    n_frozen_layers: int = 0
+    train_intervals: int = 3
     first_training_episode: int = 0
-    additional_train_episodes: int = 4
-    adaptive_training: bool = True
+    additional_train_episodes: int = 5
+    adaptive_training: bool = False
     num_workers: int = 8
-
-    balance_classes: bool = True
-    buffer_size: int = 1_000
+    balance_classes: bool = False
+    buffer_size: int = 3_000
 
 class ViTConfig(BaseModel):
     base_model_class: str = 'ViT'
@@ -70,7 +70,7 @@ class BaseConfig(BaseModel):
     random_seed: int = 100
     save_checkpoints: bool = False
     gradient_clip_val: float = 0.5
-    criterion_key: str = 'mse' # 'bce'
+    criterion_key: str = 'bce'
 
     general_model_config: ViTConfig = Field(default_factory=ViTConfig)
     pretrain: PretrainConfig = Field(default_factory=PretrainConfig)
@@ -83,7 +83,7 @@ class BaseConfig(BaseModel):
     sweep_config: str = "sweep.yaml"
     # sweep_config: str = ""
     proc_num: int = 1
-    loss: str = "MSELoss"
+    # loss: str = "MSELoss"
 
     class Config:
         validate_assignment = True
