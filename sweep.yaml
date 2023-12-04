@@ -8,77 +8,91 @@ command:
 metric:
   name: population/mean_f1
   goal: maximize
-method: bayes
+method: random
 parameters:
+  criterion_key:
+    values: ['bce', 'mse']
   general_model_config:
     parameters:
       patch_size:
-        values: [ 2, 4, 8 ]
+        value: 8
       dim:
-        values: [ 64, 128, 256 ]
+        value: 128
       depth:
-        values: [ 1, 2, 3 ]
+        value: 1
       heads:
-        values: [ 1, 2, 4 ]
+        value: 2
       mlp_dim:
-        values: [ 128, 256, 512 ]
+        value: 128
       dropout:
-        distribution: uniform
-        min: 0.1
-        max: 0.25
+        value: 0.16
       emb_dropout:
-        distribution: uniform
-        min: 0.0
-        max: 0.15
+        value: 0.15
   pretrain:
     parameters:
       epochs:
-        values: [ 4, 8, 16 ]
+        value: 16
       batch_size:
-        values: [ 1, 2, 4, 8, 16 ]
+        value: 16
       lr:
-        distribution: log_uniform_values
-        min: 0.00005
-        max: 0.001
+        value: 0.0002
       train_fraction:
-        distribution: uniform
-        min: 0.5
-        max: 0.9
+        value: 0.7
   finetune:
     parameters:
       n_frozen_layers:
-        values: [ 0, 1, 2, 3, 4 ]
+        # value: 2
+        values: [ 0, 1, 2 ]
       num_episodes:
-        values: [ 1, 5, 10 ]
+        value: 10
       epochs:
-        values: [ 1, 2, 3, 4, 5 ]
+        values: [ 5, 10, 15]
       lr:
+        # value: 0.0005
         distribution: log_uniform_values
         min: 0.0001
-        max: 0.01
+        max: 0.005
       batch_size:
-        values: [ 1, 2, 4, 8, 16 ]
+        value: 16
+      do_finetuning:
+        value: True
   online:
     parameters:
       num_episodes:
-        values: [ 1, 10, 20, 30 ]
+        value: 30
+        # values: [ 0, 6, 12, 18, 24, 30 ]
       batch_size:
+        # value: 4
         values: [ 1, 2, 4, 8, 16 ]
       epochs:
-        values: [ 1, 5, 10 ]
+        # value: 10
+        values: [ 10, 15, 20 ]
       lr:
+        # value: 0.0005
         distribution: log_uniform_values
         min: 0.0001
-        max: 0.01
+        max: 0.001
       num_sessions:
-        values: [ 1, 2, 3 ]
+        value: 3
+        # values: [ 1, 2, 3 ]
       n_frozen_layers:
-        values: [ 0, 1, 2, 3, 4 ]
+        # value: 0
+        values: [ 0, 1, 2 ]
       train_intervals:
+        # value: 1
         values: [ 1, 2, 3, 4, 5 ]
       first_training_episode:
+        # value: 1
         values: [ 0, 1, 2, 3, 4 ]
       additional_train_episodes:
+        # value: 4
         values: [ 1, 2, 3, 4, 5 ]
       adaptive_training:
-        values: [ True, False ]
+        value: False
+        # values: [ True, False ]
+      balance_classes:
+        value: False
+        # values: [ True, False ]
+      buffer_size:
+        # value: 2_500
+        values: [ 2_000, 2_500, 3000 ]

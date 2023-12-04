@@ -14,15 +14,27 @@ class EMGViT(ViT):
         return self.forward(x)
 
 
+def get_criterion(criterion_key):
+    print(f"Using {criterion_key} loss")
+    # how do we deal with keys? can we use enum in sweep config?
+    if criterion_key == 'mse':
+        return torch.nn.MSELoss()
+    elif criterion_key == 'bce':
+        return torch.nn.BCEWithLogitsLoss()
+    else:
+        print(f"{criterion_key} loss not supported")
+
+
 class PLModel(pl.LightningModule):
-    def __init__(self, model, n_labels, lr, n_frozen_layers: int, threshold: float, metric_prefix: str = ''):
+    def __init__(self, model, n_labels, lr, n_frozen_layers: int, threshold: float, metric_prefix: str = '',
+                 criterion_key: str = 'bce'):
         super(PLModel, self).__init__()
         self.save_hyperparameters(ignore=['model'])
         self.model = model
         self.lr = lr
         self.threshold = threshold
         self.metric_prefix = metric_prefix
-        self.criterion = torch.nn.MSELoss()
+        self.criterion = get_criterion(criterion_key)
         self.exact_match = ExactMatch(task="multilabel", num_labels=n_labels, threshold=threshold)
         self.f1_score = F1Score(task="multilabel", num_labels=n_labels, threshold=threshold)
         self.accuracy_metric = Accuracy(task='binary')

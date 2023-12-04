@@ -82,7 +82,8 @@ def main(logger, experiment_config: configs.BaseConfig) -> LightningModule:
         lr=experiment_config.pretrain.lr,
         n_frozen_layers=0,
         threshold=0.5,
-        metric_prefix='pretrain/'
+        metric_prefix='pretrain/',
+        criterion_key=experiment_config.criterion_key,
     )
 
     accelerator = utils.get_accelerator(experiment_config.config_type)
