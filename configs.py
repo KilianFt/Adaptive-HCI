@@ -70,6 +70,7 @@ class BaseConfig(BaseModel):
     random_seed: int = 100
     save_checkpoints: bool = False
     gradient_clip_val: float = 0.5
+    criterion_key: str = 'mse' # 'bce'
 
     general_model_config: ViTConfig = Field(default_factory=ViTConfig)
     pretrain: PretrainConfig = Field(default_factory=PretrainConfig)
@@ -94,7 +95,7 @@ class BaseConfig(BaseModel):
 
         super().__init__(**data)
         if self.sweep_config:
-            self.proc_num = 4
+            self.proc_num = 8
 
     def __str__(self):
         arg_str = pickle.dumps(self.dict())
