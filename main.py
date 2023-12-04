@@ -3,6 +3,7 @@ import hashlib
 import os
 import sys
 
+import torch
 import numpy as np
 
 import configs
@@ -27,6 +28,8 @@ def main():
         entity = "delvermm" if "delverm" in os.getlogin() else "kilian"
     except OSError:  # Happens on mila cluster
         entity = "delvermm"
+
+    torch.manual_seed(experiment_config.seed)
 
     logger, experiment_config = buddy_setup(experiment_config, entity=entity)
 

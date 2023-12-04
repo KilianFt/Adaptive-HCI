@@ -32,9 +32,8 @@ class PLModel(pl.LightningModule):
 
     def freeze_layers(self, n_frozen_layers: int) -> None:
         # reset grad
+        # this is fine for ViT as by default all params require grad
         for param in self.model.parameters():
-            # TODO: I'm afraid this will enable gradients for layers that were not meant to have them
-            # (e.g. the embeddings)
             param.requires_grad = True
 
         # freeze desired ones
@@ -44,7 +43,6 @@ class PLModel(pl.LightningModule):
             for param in self.model.dropout.parameters():
                 param.requires_grad = False
 
-        # FIXME adjust for other models than ViT
         if n_frozen_layers >= 2:
             for layer_idx in range(min((n_frozen_layers - 1), len(self.model.transformer.layers))):
                 for param in self.model.transformer.layers[layer_idx].parameters():
