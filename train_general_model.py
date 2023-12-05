@@ -74,7 +74,7 @@ def main(logger, experiment_config: configs.BaseConfig) -> LightningModule:
         channels=experiment_config.general_model_config.channels,
     )
 
-    assert experiment_config.loss in ["MSELoss"], "Only MSELoss is supported for now"
+    assert experiment_config.criterion_key in ["mse", "bce"], "{experiment_config.criterion_key} loss is supported for now"
 
     pl_model = PLModel(
         vit,
@@ -85,6 +85,8 @@ def main(logger, experiment_config: configs.BaseConfig) -> LightningModule:
         metric_prefix='pretrain/',
         criterion_key=experiment_config.criterion_key,
     )
+    if not experiment_config.pretrain.do_pretraining:
+        return pl_model
 
     accelerator = utils.get_accelerator(experiment_config.config_type)
     trainer = pl.Trainer(max_epochs=experiment_config.pretrain.epochs, log_every_n_steps=1, logger=pl_logger,
