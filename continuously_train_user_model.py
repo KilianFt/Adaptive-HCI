@@ -88,8 +88,8 @@ def get_training_bools(data, num_samples, do_training=True):
     return do_training_list
 
 
-def process_session(config, current_trial_episodes, logger, pl_model, do_training):
-    all_episodes, num_classes = datasets.get_rl_dataset(current_trial_episodes)
+def process_session(config, current_trial_episodes, logger, pl_model, do_training, shuffle):
+    all_episodes, num_classes = datasets.get_rl_dataset(current_trial_episodes, shuffle=shuffle)
 
     do_training_episodes = get_training_bools(all_episodes, config.online.num_episodes, do_training=do_training)
 
@@ -148,7 +148,7 @@ def main(pl_model: LightningModule, user_hash, config: configs.BaseConfig) -> Tu
     for session_idx, (current_trial_episodes, do_training) in enumerate(zip(online_sessions, do_training_list)):
         pl_model.metric_prefix = f'{user_hash}/continous/session_{session_idx}/'
         pl_model.step_count = 0
-        session_metrics = process_session(config, current_trial_episodes, logger, pl_model, do_training)
+        session_metrics = process_session(config, current_trial_episodes, logger, pl_model, do_training, config.online.shuffle_episodes)
         valid_metrics += session_metrics
 
     wandb.run.log({}, commit=True)
