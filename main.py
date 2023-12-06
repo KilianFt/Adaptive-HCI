@@ -2,6 +2,7 @@ import copy
 import hashlib
 import os
 import sys
+import random
 
 import torch
 import numpy as np
@@ -30,6 +31,7 @@ def main():
         entity = "delvermm"
 
     torch.manual_seed(experiment_config.seed)
+    random.seed(experiment_config.seed)
 
     logger, experiment_config = buddy_setup(experiment_config, entity=entity)
 
