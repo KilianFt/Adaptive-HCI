@@ -44,7 +44,7 @@ class OnlineConfig(BaseModel):
     train_intervals: int = 1
     first_training_episode: int = 0
     additional_train_episodes: int = 30
-    adaptive_training: bool = False
+    adaptive_training: bool = True
     num_workers: int = 8
     balance_classes: bool = False
     buffer_size: int = 3_000
