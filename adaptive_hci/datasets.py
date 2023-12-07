@@ -5,6 +5,7 @@ import pathlib
 import pickle
 import subprocess
 import time
+import random
 
 import numpy as np
 import torch
@@ -137,12 +138,16 @@ def split_by_terminal(observations, actions, rewards, terminals):
     return episodes
 
 
-def get_rl_dataset(current_trial_episodes, online_num_episodes = None):
+def get_rl_dataset(current_trial_episodes, online_num_episodes = None, shuffle=False):
     (observations, _, optimal_actions, rewards, terminals) = get_concatenated_user_episodes(current_trial_episodes)
 
     all_episodes = split_by_terminal(observations, optimal_actions, rewards, terminals)
     if online_num_episodes is not None:
         all_episodes = all_episodes[:online_num_episodes]
+
+    if shuffle:
+        print('Shuffling')
+        random.shuffle(all_episodes)
 
     num_classes = optimal_actions.shape[1]
     return all_episodes, num_classes
