@@ -11,8 +11,9 @@ from collections import deque
 
 import numpy as np
 import torch
-from controllers import SLOnlyController
 from pyomyo import Myo, emg_mode
+
+from configs import BaseConfig
 
 device = 'mps'
 emg_min = -128
@@ -52,7 +53,9 @@ if __name__ == "__main__":
     p = multiprocessing.Process(target=worker, args=(q,))
     p.start()
 
-    controller = SLOnlyController('models/pretrained_vit_onehot_mad.pt', device=device)
+    config = BaseConfig()
+    model = torch.load("models/model_perf_comparison/online_model.pt")
+    out_act = torch.nn.Sigmoid()
 
     move_map = {
         0: 'Neutral',
@@ -62,9 +65,9 @@ if __name__ == "__main__":
         4: 'Wrist Extension',  # right
     }
 
-    emg_buffer = deque(maxlen=200)
+    emg_buffer = deque(maxlen=config.window_size)
     # initialize as -150 cause first window needs 200 samples
-    n_new_samples = -150
+    n_new_samples = -config.overlap
     last_time_window = time.time()
 
     try:
@@ -79,9 +82,10 @@ if __name__ == "__main__":
             # build new window every 50 new samples
             emg_window = np.array(emg_buffer, dtype=np.float32)
             emg_window = torch.tensor(emg_window).unsqueeze(0)
-            outputs = controller.deterministic_forward(emg_window)
+            outputs = model(emg_window)
+            probs = out_act(outputs)
 
-            predictions = outputs.cpu().detach().squeeze().numpy()
+            predictions = probs.cpu().detach().squeeze().numpy()
             predicted_labels = np.zeros_like(predictions)
             predicted_labels[predictions > 0.5] = 1
 
