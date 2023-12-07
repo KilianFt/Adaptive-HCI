@@ -43,10 +43,18 @@ def extract_per_label_accuracies(episode_metrics):
     return per_label_accuracies
 
 
-def prepare_data(ep_idx, config, all_episodes, episode_metrics):
+def get_unseen_episodes(all_episodes, seen_episodes):
+        # Use user signal sum to identify episodes
+        seen_user_signal_sums = [e['user_signals'].sum() for e in seen_episodes]
+        unseen_episodes = [e for e in all_episodes if e['user_signals'].sum() not in seen_user_signal_sums]
+        return unseen_episodes
+
+
+def prepare_data(ep_idx, config, all_episodes, seen_episodes, episode_metrics):
     if config.online.adaptive_training:
         per_label_accuracies = extract_per_label_accuracies(episode_metrics)
-        current_episode = datasets.get_adaptive_episode(all_episodes, per_label_accuracies)
+        unseen_episodes = get_unseen_episodes(all_episodes=all_episodes, seen_episodes=seen_episodes)
+        current_episode = datasets.get_adaptive_episode(unseen_episodes, per_label_accuracies)
     else:
         current_episode = all_episodes[ep_idx]
 
@@ -54,13 +62,13 @@ def prepare_data(ep_idx, config, all_episodes, episode_metrics):
     actions = [current_episode.actions]
     if ep_idx > 0:
         num_samples = min(config.online.additional_train_episodes, ep_idx)
-        for e in random.sample(all_episodes, num_samples):
+        for e in random.sample(seen_episodes, num_samples):
             observations.append(e.observations)
             actions.append(e.actions)
 
     train_observations = np.concatenate(observations)
     train_actions = np.concatenate(actions)
-    return to_tensor_dataset(train_observations, train_actions)
+    return to_tensor_dataset(train_observations, train_actions), current_episode
 
 
 def validate_model(trainer: Trainer, pl_model, val_dataset, config):
@@ -110,7 +118,7 @@ def process_session(config, current_trial_episodes, logger, pl_model, do_trainin
                          gradient_clip_val=config.gradient_clip_val)
 
     session_val_metrics_list = []
-
+    seen_episodes = []
     for ep_idx, (rollout, is_train_episode) in enumerate(zip(all_episodes, do_training_episodes)):
         trainer.fit_loop.max_epochs += config.online.epochs
 
@@ -119,7 +127,8 @@ def process_session(config, current_trial_episodes, logger, pl_model, do_trainin
         session_val_metrics_list.append(validation_metrics)
 
         if is_train_episode and ep_idx >= config.online.first_training_episode and ep_idx % config.online.train_intervals == 0:
-            train_dataset = prepare_data(ep_idx, config, all_episodes, validation_metrics)
+            train_dataset, current_episode = prepare_data(ep_idx, config, all_episodes, seen_episodes, validation_metrics)
+            seen_episodes.append(current_episode)
             replay_buffer.extend(train_dataset)
 
             if len(replay_buffer) > 0:
