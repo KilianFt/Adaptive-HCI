@@ -6,6 +6,7 @@ import pickle
 import subprocess
 import time
 import random
+from typing import Optional
 
 import numpy as np
 import torch
@@ -39,8 +40,11 @@ gesture_names = [
 ]
 
 
-def get_episode_modes(episodes, n_samples_considered: int = 20):
-    primary_actions = [extract_primary_action(ep.actions[:n_samples_considered]) for ep in episodes]
+def get_episode_modes(episodes, n_samples_considered: Optional[int] = None):
+    if n_samples_considered is not None:
+        primary_actions = [extract_primary_action(ep.actions[:n_samples_considered]) for ep in episodes]
+    else:
+        primary_actions = [extract_primary_action(ep.actions) for ep in episodes]
     return primary_actions
 
 
