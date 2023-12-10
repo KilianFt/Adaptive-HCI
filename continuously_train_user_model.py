@@ -112,10 +112,11 @@ def process_session(config, current_trial_episodes, logger, pl_model, do_trainin
             num_classes=num_classes
         )
 
+    callbacks = utils.get_trainer_callbacks(config.online)
     accelerator = utils.get_accelerator(config.config_type)
     trainer = pl.Trainer(max_epochs=0, log_every_n_steps=1, logger=logger,
                          enable_checkpointing=config.save_checkpoints, accelerator=accelerator,
-                         gradient_clip_val=config.gradient_clip_val)
+                         gradient_clip_val=config.gradient_clip_val, callbacks=callbacks)
 
     session_val_metrics_list = []
     seen_episodes = []
