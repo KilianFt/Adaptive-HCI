@@ -8,12 +8,12 @@ command:
 metric:
   name: population/mean_f1
   goal: maximize
-method: random
+method: bayes
 parameters:
   criterion_key:
     value: 'bce'
   random_seed:
-    values: [ 4168, 3773, 4181, 2945, 4132, 1405, 4328, 1720, 1691, 78 ]
+    value: 100 #[ 4168, 3773, 4181, 2945, 4132, 1405, 4328, 1720, 1691, 78 ]
   general_model_config:
     parameters:
       patch_size:
@@ -42,6 +42,18 @@ parameters:
         value: 0.7
       do_pretraining:
         value: True
+      do_swa:
+        values: [ True, False ]
+      swa_lrs:
+        # value: 1e-2
+        distribution: log_uniform_values
+        min: 0.001
+        max: 0.1
+      swa_epoch_start:
+        min: 0.7
+        max: 0.95
+      annealing_epochs: 
+        values: [ 5, 10, 20 ]
   finetune:
     parameters:
       n_frozen_layers:
@@ -55,15 +67,15 @@ parameters:
       batch_size:
         value: 64
       do_finetuning:
-        value: True
+        value: False
   online:
     parameters:
       num_episodes:
-        # value: 30
-        min:
-          1
-        max:
-          30
+        value: 0
+        # min:
+        #   1
+        # max:
+        #   30
       batch_size:
         value: 5
         # values: [ 5, 10 ]
@@ -85,7 +97,7 @@ parameters:
       additional_train_episodes:
         value: 30
       adaptive_training:
-        values: [ True, False ]
+        value: True
       balance_classes:
         value: False
       buffer_size:

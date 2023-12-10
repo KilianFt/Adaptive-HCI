@@ -22,6 +22,10 @@ class PretrainConfig(BaseModel):
     train_fraction: float = Field(0.7, description="% of the data for training")
     num_workers: int = 8
     do_pretraining: bool = True
+    do_swa: bool = True
+    swa_lrs: float = 1e-2
+    swa_epoch_start: float = 0.8
+    annealing_epochs: int = 10
 
 
 class FinetuneConfig(BaseModel):

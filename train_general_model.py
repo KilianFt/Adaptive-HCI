@@ -2,6 +2,7 @@ import torch
 from torch.utils.data import DataLoader, random_split
 import lightning.pytorch as pl
 from lightning.pytorch.loggers import WandbLogger
+from lightning.pytorch.callbacks import StochasticWeightAveraging
 from lightning.pytorch import LightningModule
 
 import configs
@@ -88,10 +89,22 @@ def main(logger, experiment_config: configs.BaseConfig) -> LightningModule:
     if not experiment_config.pretrain.do_pretraining:
         return pl_model
 
+
+    if experiment_config.pretrain.do_swa:
+        callbacks = [StochasticWeightAveraging(swa_lrs=experiment_config.pretrain.swa_lrs,
+                            swa_epoch_start=experiment_config.pretrain.swa_epoch_start,
+                            annealing_epochs=experiment_config.pretrain.annealing_epochs)]
+    else:
+        callbacks = None
+
     accelerator = utils.get_accelerator(experiment_config.config_type)
-    trainer = pl.Trainer(max_epochs=experiment_config.pretrain.epochs, log_every_n_steps=1, logger=pl_logger,
-                         enable_checkpointing=experiment_config.save_checkpoints, accelerator=accelerator,
-                         gradient_clip_val=experiment_config.gradient_clip_val)
+    trainer = pl.Trainer(max_epochs=experiment_config.pretrain.epochs,
+                         log_every_n_steps=1,
+                         logger=pl_logger,
+                         enable_checkpointing=experiment_config.save_checkpoints,
+                         accelerator=accelerator,
+                         gradient_clip_val=experiment_config.gradient_clip_val,
+                         callbacks=callbacks)
 
     trainer.fit(model=pl_model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 
