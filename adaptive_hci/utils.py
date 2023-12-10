@@ -5,6 +5,7 @@ from functools import wraps
 
 import numpy as np
 import torch
+from lightning.pytorch.callbacks import StochasticWeightAveraging
 
 
 def get_accelerator(config_type):
@@ -17,6 +18,18 @@ def get_accelerator(config_type):
         accelerator = 'cuda'
 
     return accelerator
+
+
+def get_trainer_callbacks(stage_config):
+    if stage_config.do_swa:
+        callbacks = [StochasticWeightAveraging(swa_lrs=stage_config.swa_lrs,
+                            swa_epoch_start=stage_config.swa_epoch_start,
+                            annealing_epochs=stage_config.annealing_epochs)]
+    else:
+        callbacks = None
+
+    return callbacks
+
 
 def labels_to_onehot(label):
     onehot = np.zeros(5)
