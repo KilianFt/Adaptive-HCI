@@ -6,6 +6,7 @@ import pickle
 import subprocess
 import time
 import random
+from typing import Optional
 
 import numpy as np
 import torch
@@ -39,8 +40,11 @@ gesture_names = [
 ]
 
 
-def get_episode_modes(episodes, n_samples_considered: int = 20):
-    primary_actions = [extract_primary_action(ep.actions[:n_samples_considered]) for ep in episodes]
+def get_episode_modes(episodes, n_samples_considered: Optional[int] = None):
+    if n_samples_considered is not None:
+        primary_actions = [extract_primary_action(ep.actions[:n_samples_considered]) for ep in episodes]
+    else:
+        primary_actions = [extract_primary_action(ep.actions) for ep in episodes]
     return primary_actions
 
 
@@ -311,7 +315,7 @@ def create_ninapro_windows(X, y, stride, window_length, desired_labels=None):
     return np.array(windows, dtype=np.float32), np.array(labels, dtype=int)
 
 
-def get_ninapro_windows_dataset(ninapro_base_dir, emg_range, window_length, overlap):
+def get_ninapro_windows_dataset(ninapro_base_dir, emg_range, window_length, overlap, get_raw_labels=False):
     ninapro_windows = None
     ninapro_labels = None
 
@@ -330,11 +334,13 @@ def get_ninapro_windows_dataset(ninapro_base_dir, emg_range, window_length, over
                 ninapro_s_x = np.interp(ninapro_s_x_raw, emg_range, (-1, +1))
                 ninapro_s_y = ninapro_s1['restimulus'].squeeze()
 
+                desired_labels = None if get_raw_labels else [0, 13, 14, 15, 16]
+
                 subject_windows, subject_labels = create_ninapro_windows(X=ninapro_s_x,
                                                                          y=ninapro_s_y,
                                                                          stride=stride,
                                                                          window_length=window_length,
-                                                                         desired_labels=[0, 13, 14, 15, 16], )
+                                                                         desired_labels=desired_labels, )
 
                 if ninapro_windows is None:
                     ninapro_windows = subject_windows
@@ -344,6 +350,9 @@ def get_ninapro_windows_dataset(ninapro_base_dir, emg_range, window_length, over
                     ninapro_labels = np.concatenate((ninapro_labels, subject_labels))
 
     ninapro_windows = ninapro_windows.swapaxes(1, 2)
+
+    if get_raw_labels:
+        return ninapro_windows, ninapro_labels
 
     # replace labels
     label_map = {0: 0,
