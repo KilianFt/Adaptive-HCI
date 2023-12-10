@@ -25,6 +25,12 @@ def get_criterion(criterion_key):
         print(f"{criterion_key} loss not supported")
 
 
+def multilabel_at_least_one_match(y_true, y_pred):
+    intersection = (y_true * y_pred).sum(dim=-1)
+    at_least_one_correct = (intersection > 0).float()
+    return at_least_one_correct.mean()
+
+
 class PLModel(pl.LightningModule):
     def __init__(self, model, n_labels, lr, n_frozen_layers: int, threshold: float, metric_prefix: str = '',
                  criterion_key: str = 'bce'):
@@ -89,10 +95,12 @@ class PLModel(pl.LightningModule):
 
         val_acc = self.exact_match(outputs, targets)
         val_f1 = self.f1_score(outputs, targets)
+        one_match = multilabel_at_least_one_match(y_true=targets, y_pred=outputs)
         val_loss = F.mse_loss(outputs, targets)
         self.log(f'{self.metric_prefix}validation/loss', val_loss, prog_bar=True)
         self.log(f'{self.metric_prefix}validation/acc', val_acc, prog_bar=True)
         self.log(f'{self.metric_prefix}validation/f1', val_f1, prog_bar=True)
+        self.log(f'{self.metric_prefix}validation/one_match', one_match, prog_bar=True)
         self.log(f'{self.metric_prefix}validation/step', self.step_count, prog_bar=True)
 
         per_label_accuracies = self.get_per_label_accuracies(outputs, targets)

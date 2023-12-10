@@ -21,30 +21,30 @@ class PretrainConfig(BaseModel):
     lr: float = 0.00083
     train_fraction: float = Field(0.7, description="% of the data for training")
     num_workers: int = 8
-    do_pretraining: bool = False
+    do_pretraining: bool = True
 
 
 class FinetuneConfig(BaseModel):
-    n_frozen_layers: int = 0
+    n_frozen_layers: int = 1
     num_episodes: Optional[int] = None
     epochs: int = 70
     lr: float = 0.0002269
     batch_size: int = 64
     num_workers: int = 8
-    do_finetuning: bool = False
+    do_finetuning: bool = True
 
 
 class OnlineConfig(BaseModel):
-    num_episodes: Optional[int] = 0#30
-    batch_size: int = 32
+    num_episodes: Optional[int] = 30
+    batch_size: int = 5
     epochs: int = 20
-    lr: float = 0.0005
+    lr: float = 0.00045
     num_sessions: Optional[int] = 3
-    n_frozen_layers: int = 0
+    n_frozen_layers: int = 1
     train_intervals: int = 1
     first_training_episode: int = 0
     additional_train_episodes: int = 30
-    adaptive_training: bool = False
+    adaptive_training: bool = True
     num_workers: int = 8
     balance_classes: bool = False
     buffer_size: int = 3_000
