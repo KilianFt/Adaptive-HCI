@@ -21,6 +21,13 @@ class PretrainConfig(BaseModel):
     lr: float = 0.00083
     train_fraction: float = Field(0.7, description="% of the data for training")
     num_workers: int = 8
+
+    # Stochastic Weight Averaging
+    do_swa: bool = True
+    swa_lrs: float = 3e-2
+    swa_epoch_start: float = 0.7
+    annealing_epochs: int = 10
+
     do_pretraining: bool = True
 
 
