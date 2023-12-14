@@ -22,10 +22,11 @@ def get_criterion(criterion_key):
     elif criterion_key == 'bce':
         return torch.nn.BCEWithLogitsLoss()
     else:
-        print(f"{criterion_key} loss not supported")
+        raise NotImplementedError(f"{criterion_key} loss not supported")
 
 
 def multilabel_at_least_one_match(y_true, y_pred):
+    ''' Is correct if at least one label is predicted'''
     intersection = (y_true * y_pred).sum(dim=-1)
     at_least_one_correct = (intersection > 0).float()
     return at_least_one_correct.mean()

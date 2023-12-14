@@ -96,11 +96,7 @@ def get_training_bools(data, num_samples, do_training=True):
     return do_training_list
 
 
-def process_session(config, current_trial_episodes, logger, pl_model, do_training, shuffle):
-    all_episodes, num_classes = datasets.get_rl_dataset(current_trial_episodes, shuffle=shuffle)
-
-    do_training_episodes = get_training_bools(all_episodes, config.online.num_episodes, do_training=do_training)
-
+def get_replay_buffer(num_classes, config):
     if config.online.balance_classes:
         replay_buffer = replay_buffers.ClassBalancingReplayBuffer(
             max_size=config.online.buffer_size,
@@ -111,6 +107,14 @@ def process_session(config, current_trial_episodes, logger, pl_model, do_trainin
             max_size=config.online.buffer_size,
             num_classes=num_classes
         )
+
+    return replay_buffer
+
+
+def process_session(config, current_trial_episodes, logger, pl_model, do_training, shuffle):
+    all_episodes, num_classes = datasets.get_rl_dataset(current_trial_episodes, shuffle=shuffle)
+    do_training_episodes = get_training_bools(all_episodes, config.online.num_episodes, do_training=do_training)
+    replay_buffer = get_replay_buffer(num_classes, config)
 
     accelerator = utils.get_accelerator(config.config_type)
     trainer = pl.Trainer(max_epochs=0, log_every_n_steps=1, logger=logger,
@@ -133,9 +137,6 @@ def process_session(config, current_trial_episodes, logger, pl_model, do_trainin
 
             if len(replay_buffer) > 0:
                 train_model(trainer, pl_model, replay_buffer, config)
-
-    validation_metrics = validate_model(trainer, pl_model, val_dataset, config)
-    session_val_metrics_list.append(validation_metrics)
 
     return session_val_metrics_list
 
