@@ -369,10 +369,11 @@ def get_ninapro_windows_dataset(ninapro_base_dir, emg_range, window_length, over
 
 
 class EMGWindowsDataset(data.Dataset):
+    BASE_DIR = pathlib.Path(__file__).parents[1].resolve().as_posix()
     DATASET_DIRS = {
-        DataSourceEnum.NINA_PRO: ('datasets/ninapro/DB5', get_ninapro_windows_dataset),
-        DataSourceEnum.MAD: ('datasets/MyoArmbandDataset/', get_mad_windows_dataset),
-        DataSourceEnum.MiniMAD: ('datasets/MyoArmbandDataset/', get_mad_windows_dataset),
+        DataSourceEnum.NINA_PRO: (BASE_DIR+'/datasets/ninapro/DB5', get_ninapro_windows_dataset),
+        DataSourceEnum.MAD: (BASE_DIR+'/datasets/MyoArmbandDataset/', get_mad_windows_dataset),
+        DataSourceEnum.MiniMAD: (BASE_DIR+'/datasets/MyoArmbandDataset/', get_mad_windows_dataset),
     }
     # Mila server, it's a hack.
     if os.path.exists("/home/mila/d/delvermm/scratch/"):
