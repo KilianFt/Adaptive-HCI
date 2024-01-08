@@ -5,6 +5,8 @@ import pathlib
 import pickle
 import subprocess
 import time
+import random
+from typing import Optional
 
 import numpy as np
 import torch
@@ -38,8 +40,11 @@ gesture_names = [
 ]
 
 
-def get_episode_modes(episodes, n_samples_considered: int = 20):
-    primary_actions = [extract_primary_action(ep.actions[:n_samples_considered]) for ep in episodes]
+def get_episode_modes(episodes, n_samples_considered: Optional[int] = None):
+    if n_samples_considered is not None:
+        primary_actions = [extract_primary_action(ep.actions[:n_samples_considered]) for ep in episodes]
+    else:
+        primary_actions = [extract_primary_action(ep.actions) for ep in episodes]
     return primary_actions
 
 
@@ -137,12 +142,16 @@ def split_by_terminal(observations, actions, rewards, terminals):
     return episodes
 
 
-def get_rl_dataset(current_trial_episodes, online_num_episodes):
+def get_rl_dataset(current_trial_episodes, online_num_episodes = None, shuffle=False):
     (observations, _, optimal_actions, rewards, terminals) = get_concatenated_user_episodes(current_trial_episodes)
 
     all_episodes = split_by_terminal(observations, optimal_actions, rewards, terminals)
     if online_num_episodes is not None:
         all_episodes = all_episodes[:online_num_episodes]
+
+    if shuffle:
+        print('Shuffling')
+        random.shuffle(all_episodes)
 
     num_classes = optimal_actions.shape[1]
     return all_episodes, num_classes
@@ -306,7 +315,7 @@ def create_ninapro_windows(X, y, stride, window_length, desired_labels=None):
     return np.array(windows, dtype=np.float32), np.array(labels, dtype=int)
 
 
-def get_ninapro_windows_dataset(ninapro_base_dir, emg_range, window_length, overlap):
+def get_ninapro_windows_dataset(ninapro_base_dir, emg_range, window_length, overlap, get_raw_labels=False):
     ninapro_windows = None
     ninapro_labels = None
 
@@ -325,11 +334,13 @@ def get_ninapro_windows_dataset(ninapro_base_dir, emg_range, window_length, over
                 ninapro_s_x = np.interp(ninapro_s_x_raw, emg_range, (-1, +1))
                 ninapro_s_y = ninapro_s1['restimulus'].squeeze()
 
+                desired_labels = None if get_raw_labels else [0, 13, 14, 15, 16]
+
                 subject_windows, subject_labels = create_ninapro_windows(X=ninapro_s_x,
                                                                          y=ninapro_s_y,
                                                                          stride=stride,
                                                                          window_length=window_length,
-                                                                         desired_labels=[0, 13, 14, 15, 16], )
+                                                                         desired_labels=desired_labels, )
 
                 if ninapro_windows is None:
                     ninapro_windows = subject_windows
@@ -339,6 +350,9 @@ def get_ninapro_windows_dataset(ninapro_base_dir, emg_range, window_length, over
                     ninapro_labels = np.concatenate((ninapro_labels, subject_labels))
 
     ninapro_windows = ninapro_windows.swapaxes(1, 2)
+
+    if get_raw_labels:
+        return ninapro_windows, ninapro_labels
 
     # replace labels
     label_map = {0: 0,
@@ -355,10 +369,11 @@ def get_ninapro_windows_dataset(ninapro_base_dir, emg_range, window_length, over
 
 
 class EMGWindowsDataset(data.Dataset):
+    BASE_DIR = pathlib.Path(__file__).parents[1].resolve().as_posix()
     DATASET_DIRS = {
-        DataSourceEnum.NINA_PRO: ('datasets/ninapro/DB5', get_ninapro_windows_dataset),
-        DataSourceEnum.MAD: ('datasets/MyoArmbandDataset/', get_mad_windows_dataset),
-        DataSourceEnum.MiniMAD: ('datasets/MyoArmbandDataset/', get_mad_windows_dataset),
+        DataSourceEnum.NINA_PRO: (BASE_DIR+'/datasets/ninapro/DB5', get_ninapro_windows_dataset),
+        DataSourceEnum.MAD: (BASE_DIR+'/datasets/MyoArmbandDataset/', get_mad_windows_dataset),
+        DataSourceEnum.MiniMAD: (BASE_DIR+'/datasets/MyoArmbandDataset/', get_mad_windows_dataset),
     }
     # Mila server, it's a hack.
     if os.path.exists("/home/mila/d/delvermm/scratch/"):
@@ -456,7 +471,7 @@ class CombinedDataset(data.Dataset):
 
 def load_files(data_dir, filenames):
     online_episodes_list = []
- 
+
     for filename in filenames:
         filepath = data_dir / filename
         with open(filepath, 'rb') as f:
@@ -466,7 +481,7 @@ def load_files(data_dir, filenames):
     return online_episodes_list
 
 
-def get_stored_sessions(stage: str, file_ids, num_episodes):
+def get_stored_sessions(stage: str, file_ids, num_episodes = None):
     stage = pathlib.Path("Online" + stage)
     data_dir = base_data_dir / stage
 

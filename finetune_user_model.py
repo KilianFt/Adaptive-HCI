@@ -12,6 +12,7 @@ import configs
 from adaptive_hci.datasets import get_concatenated_user_episodes, to_tensor_dataset, get_stored_sessions
 from adaptive_hci import utils
 
+
 finetune_user_ids = [
     "1Sitb0ooo2izvkHQGNQkXTGoDV4CJAnFF",
     "1bIYLJVu-SqHzRnTFxuc1vkzRBs8Ll5Oi",
@@ -21,6 +22,10 @@ finetune_user_ids = [
 
 
 def main(model: LightningModule, user_hash, config: configs.BaseConfig) -> LightningModule:
+    if not config.finetune.do_finetuning:
+        print('Skip finetuning')
+        return model
+
     logger = WandbLogger(project='adaptive_hci', tags=["finetune", user_hash], config=config,
                          name=f"finetune_{config}_{user_hash[:15]}")
 
@@ -30,22 +35,11 @@ def main(model: LightningModule, user_hash, config: configs.BaseConfig) -> Light
     for ep in episode_list[:-1]:
         train_episodes += ep
 
-    if config.finetune.num_episodes is not None:
-        train_episodes = train_episodes[:1]
-
     val_episodes = episode_list[-1]
 
-    (train_observations,
-     train_actions,
-     train_optimal_actions,
-     train_rewards,
-     train_terminals) = get_concatenated_user_episodes(episodes=train_episodes)
+    train_observations, _, train_optimal_actions, _, _ = get_concatenated_user_episodes(episodes=train_episodes)
 
-    (val_observations,
-     val_actions,
-     val_optimal_actions,
-     val_rewards,
-     val_terminals) = get_concatenated_user_episodes(episodes=val_episodes)
+    val_observations, _, val_optimal_actions, _, _ = get_concatenated_user_episodes(episodes=val_episodes)
 
     train_offline_adaption_dataset = to_tensor_dataset(train_observations, train_optimal_actions)
     val_offline_adaption_dataset = to_tensor_dataset(val_observations, val_optimal_actions)

@@ -2,7 +2,10 @@ import copy
 import hashlib
 import os
 import sys
+import random
+import collections
 
+import torch
 import numpy as np
 
 import configs
@@ -17,6 +20,19 @@ train_users = [
 ]
 
 
+def get_user_results(user_metrics):
+    user_results = collections.defaultdict(list)
+    for user_session_metric in user_metrics:
+        for key, value in user_session_metric.items():
+            if key.endswith("validation/acc"):
+                user_results['acc'].append(value)
+            elif key.endswith("validation/f1"):
+                user_results['f1'].append(value)
+            elif key.endswith("validation/one_match"):
+                user_results['one_match'].append(value)
+    return user_results
+
+
 def main():
     if sys.gettrace():
         experiment_config = configs.SmokeConfig()
@@ -28,34 +44,28 @@ def main():
     except OSError:  # Happens on mila cluster
         entity = "delvermm"
 
+    torch.manual_seed(experiment_config.seed)
+    random.seed(experiment_config.seed)
+
     logger, experiment_config = buddy_setup(experiment_config, entity=entity)
 
     general_model = train_general_model.main(logger, experiment_config)
 
-    population_metrics = []
+    population_metrics = collections.defaultdict(list)
+
     for user_hash in train_users:
         initial_model = copy.deepcopy(general_model)
         finetuned_user_model = finetune_user_model.main(initial_model, user_hash, experiment_config)
-        user_model, metrics = continuously_train_user_model.main(finetuned_user_model, user_hash, experiment_config)
-        population_metrics.append(metrics)
+        user_model, user_metrics = continuously_train_user_model.main(finetuned_user_model, user_hash, experiment_config)
 
-    population_accuracies = []
-    population_f1s = []
-    for user_metrics in population_metrics:
-        user_accuracies = []
-        user_f1s = []
-        for user_session_metric in user_metrics:
-            for key, value in user_session_metric.items():
-                if key.endswith("validation/acc"):
-                    user_accuracies.append(value)
-                elif key.endswith("validation/f1"):
-                    user_f1s.append(value)
-        population_accuracies.append(np.mean(user_accuracies))
-        population_f1s.append(np.mean(user_f1s))
+        user_results = get_user_results(user_metrics)
+        for key, value in user_results.items():
+            population_metrics[key].append(np.mean(value))
 
     logger.log({
-        "population/mean_accuracy": np.mean(population_accuracies),
-        "population/mean_f1": np.mean(population_f1s)
+        "population/mean_accuracy": np.mean(population_metrics['acc']),
+        "population/mean_f1": np.mean(population_metrics["f1"]),
+        "population/mean_one_match": np.mean(population_metrics["one_match"]),
     })
 
 

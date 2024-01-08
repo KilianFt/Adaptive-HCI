@@ -16,50 +16,63 @@ class BaseModel(pydantic.BaseModel):
 
 
 class PretrainConfig(BaseModel):
-    epochs: int = 40
-    batch_size: int = 32
-    lr: float = 0.0007
-    train_fraction: float = Field(0.8, description="% of the data for training")
+    epochs: int = 50
+    batch_size: int = 128
+    lr: float = 0.00083
+    train_fraction: float = Field(0.7, description="% of the data for training")
     num_workers: int = 8
+
+    # Stochastic Weight Averaging
+    do_swa: bool = True
+    swa_lrs: float = 3e-2
+    swa_epoch_start: float = 0.7
+    annealing_epochs: int = 10
+
+    do_pretraining: bool = True
 
 
 class FinetuneConfig(BaseModel):
-    n_frozen_layers: int = 2
+    n_frozen_layers: int = 1
     num_episodes: Optional[int] = None
-    epochs: int = 50
-    lr: float = 0.005
-    batch_size: int = 32
+    epochs: int = 70
+    lr: float = 0.0002269
+    batch_size: int = 64
     num_workers: int = 8
+    do_finetuning: bool = True
 
 
 class OnlineConfig(BaseModel):
-    num_episodes: Optional[int] = None
-    batch_size: int = 16
-    epochs: int = 9
-    lr: float = 3.5e-3
-    num_sessions: Optional[int] = None
-    n_frozen_layers: int = 2
-    train_intervals: int = 4
+    num_episodes: Optional[int] = 30
+    batch_size: int = 5
+    epochs: int = 20
+    lr: float = 0.00045
+    num_sessions: Optional[int] = 3
+    n_frozen_layers: int = 1
+    train_intervals: int = 1
     first_training_episode: int = 0
-    additional_train_episodes: int = 4
+    additional_train_episodes: int = 30
     adaptive_training: bool = True
     num_workers: int = 8
+    balance_classes: bool = False
+    buffer_size: int = 3_000
+    shuffle_episodes: bool = True
 
 
 class ViTConfig(BaseModel):
     base_model_class: str = 'ViT'
     patch_size: int = 8
-    dim: int = 64
-    depth: int = 1
-    heads: int = 2
-    mlp_dim: int = 128
-    dropout: float = 0.177
-    emb_dropout: float = 0.277
+    dim: int = 256
+    depth: int = 2
+    heads: int = 5
+    mlp_dim: int = 256
+    dropout: float = 0.21
+    emb_dropout: float = 0.1735
     channels: int = 1
 
 
 class BaseConfig(BaseModel):
     config_type: str = 'base'
+    seed: int = 1000
     data_source: DataSourceEnum = DataSourceEnum.MAD
     window_size: int = 200
     overlap: int = 150
@@ -67,6 +80,7 @@ class BaseConfig(BaseModel):
     random_seed: int = 100
     save_checkpoints: bool = False
     gradient_clip_val: float = 0.5
+    criterion_key: str = 'bce'
 
     general_model_config: ViTConfig = Field(default_factory=ViTConfig)
     pretrain: PretrainConfig = Field(default_factory=PretrainConfig)
@@ -79,7 +93,7 @@ class BaseConfig(BaseModel):
     sweep_config: str = "sweep.yaml"
     # sweep_config: str = ""
     proc_num: int = 1
-    loss: str = "MSELoss"
+    # loss: str = "MSELoss"
 
     class Config:
         validate_assignment = True
@@ -91,7 +105,7 @@ class BaseConfig(BaseModel):
 
         super().__init__(**data)
         if self.sweep_config:
-            self.proc_num = 4
+            self.proc_num = 8
 
     def __str__(self):
         arg_str = pickle.dumps(self.dict())

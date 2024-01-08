@@ -14,15 +14,34 @@ class EMGViT(ViT):
         return self.forward(x)
 
 
+def get_criterion(criterion_key):
+    print(f"Using {criterion_key} loss")
+    # how do we deal with keys? can we use enum in sweep config?
+    if criterion_key == 'mse':
+        return torch.nn.MSELoss()
+    elif criterion_key == 'bce':
+        return torch.nn.BCEWithLogitsLoss()
+    else:
+        raise NotImplementedError(f"{criterion_key} loss not supported")
+
+
+def multilabel_at_least_one_match(y_true, y_pred):
+    ''' Is correct if at least one label is predicted'''
+    intersection = (y_true * y_pred).sum(dim=-1)
+    at_least_one_correct = (intersection > 0).float()
+    return at_least_one_correct.mean()
+
+
 class PLModel(pl.LightningModule):
-    def __init__(self, model, n_labels, lr, n_frozen_layers: int, threshold: float, metric_prefix: str = ''):
+    def __init__(self, model, n_labels, lr, n_frozen_layers: int, threshold: float, metric_prefix: str = '',
+                 criterion_key: str = 'bce'):
         super(PLModel, self).__init__()
         self.save_hyperparameters(ignore=['model'])
         self.model = model
         self.lr = lr
         self.threshold = threshold
         self.metric_prefix = metric_prefix
-        self.criterion = torch.nn.MSELoss()
+        self.criterion = get_criterion(criterion_key)
         self.exact_match = ExactMatch(task="multilabel", num_labels=n_labels, threshold=threshold)
         self.f1_score = F1Score(task="multilabel", num_labels=n_labels, threshold=threshold)
         self.accuracy_metric = Accuracy(task='binary')
@@ -32,6 +51,7 @@ class PLModel(pl.LightningModule):
 
     def freeze_layers(self, n_frozen_layers: int) -> None:
         # reset grad
+        # this is fine for ViT as by default all params require grad
         for param in self.model.parameters():
             param.requires_grad = True
 
@@ -42,7 +62,6 @@ class PLModel(pl.LightningModule):
             for param in self.model.dropout.parameters():
                 param.requires_grad = False
 
-        # FIXME adjust for other models than ViT
         if n_frozen_layers >= 2:
             for layer_idx in range(min((n_frozen_layers - 1), len(self.model.transformer.layers))):
                 for param in self.model.transformer.layers[layer_idx].parameters():
@@ -66,7 +85,7 @@ class PLModel(pl.LightningModule):
         per_labels_accuracies = []
 
         for label_idx in range(num_targets):
-            label_acc = self.accuracy_metric(binary_outputs[:,label_idx], binary_targets[:,label_idx])
+            label_acc = self.accuracy_metric(binary_outputs[:, label_idx], binary_targets[:, label_idx])
             per_labels_accuracies.append(label_acc)
 
         return torch.tensor(per_labels_accuracies)
@@ -77,10 +96,12 @@ class PLModel(pl.LightningModule):
 
         val_acc = self.exact_match(outputs, targets)
         val_f1 = self.f1_score(outputs, targets)
+        one_match = multilabel_at_least_one_match(y_true=targets, y_pred=outputs)
         val_loss = F.mse_loss(outputs, targets)
         self.log(f'{self.metric_prefix}validation/loss', val_loss, prog_bar=True)
         self.log(f'{self.metric_prefix}validation/acc', val_acc, prog_bar=True)
         self.log(f'{self.metric_prefix}validation/f1', val_f1, prog_bar=True)
+        self.log(f'{self.metric_prefix}validation/one_match', one_match, prog_bar=True)
         self.log(f'{self.metric_prefix}validation/step', self.step_count, prog_bar=True)
 
         per_label_accuracies = self.get_per_label_accuracies(outputs, targets)

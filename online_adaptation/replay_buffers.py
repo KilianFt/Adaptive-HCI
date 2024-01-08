@@ -10,7 +10,22 @@ base = torch.tensor([2 ** i for i in reversed(range(5))], dtype=torch.float32)
 
 class ReplayBuffer(Dataset):
     def __init__(self, max_size, num_classes):
-        self.buffers = {k: collections.deque(maxlen=max_size) for k in range(num_classes)}
+        self.buffer = collections.deque(maxlen=max_size)
+
+    def extend(self, dataset):
+        self.buffer.extend(list(dataset))
+
+    def __getitem__(self, sample_idx):
+        return self.buffer[sample_idx]
+
+    def __len__(self):
+        return len(self.buffer)
+
+
+class ClassBalancingReplayBuffer(Dataset):
+    def __init__(self, max_size, num_classes):
+        self.buffers = {k: collections.deque(maxlen=max_size // num_classes) for k in range(num_classes)}
+        self.num_classes = num_classes
 
     def add(self, observation: torch.Tensor, action: torch.Tensor):
         assert (action.long() == action).all(), "Actions must be integers"
@@ -19,16 +34,18 @@ class ReplayBuffer(Dataset):
             self.buffers[target].append(observation)
 
     def extend(self, dataset):
+        xs, ys = zip(*dataset)
+        ys = torch.stack(ys)
+        assert (ys.long() == ys).all(), "Actions must be integers"
+        assert (ys[:, 0] == 0).all(), "0 is supposed to be unused"
+
         for x, y in dataset:  # TODO: This for loop sucks
             self.add(x, y)
 
-    @property
-    def num_classes(self):
-        return len(self.buffers.values())
-
     def __getitem__(self, sample_idx):
         # TODO: this is not ok, nor deterministic
-        classes = list(self.buffers.keys())
+        assert len(self) > 0, "The buffer is not yet filled"
+        classes = list(range(self.num_classes))
         classes.remove(0)  # 0 is unused for now.
         class_idx = random.choice(classes)
         class_onehot = torch.zeros(self.num_classes)
