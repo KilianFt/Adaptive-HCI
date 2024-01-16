@@ -6,7 +6,7 @@ import pickle
 import subprocess
 import time
 import random
-from typing import Optional
+from typing import Optional, Any
 from pathlib import Path
 from collections import defaultdict
 
@@ -15,7 +15,7 @@ import numpy as np
 import torch
 from scipy.io import loadmat
 from torch.utils import data
-from torch.utils.data import TensorDataset
+from torch.utils.data import TensorDataset, Dataset
 
 from common import DataSourceEnum
 from .utils import labels_to_onehot, predictions_to_onehot
@@ -664,3 +664,35 @@ def get_omniglot_moves(omniglot_dir: Path, canvas_size: int = 30, max_initial_va
                 [0, 0]]
     encoded_moves_data = encode_moves(moves_data, move_map)
     return encoded_moves_data
+
+
+def pad_data(data, pad_token, max_token_len):
+    padded_data = []
+    for sample in data:
+        sample_len = len(sample)
+        if sample_len < max_token_len:
+            pad_len = max_token_len - sample_len
+            padding = torch.zeros(pad_len) + pad_token
+            padded_sample = torch.cat((sample, padding))
+
+        else:
+            padded_sample = sample[:max_token_len]
+        padded_data.append(padded_sample)
+
+    return torch.stack(padded_data).type(torch.long)
+
+
+class MaskedTokensDataset(Dataset):
+    def __init__(self, data, max_token_len, pad_token=99):
+        # TODO make sure type == torch.long
+        self.data = pad_data(data, pad_token, max_token_len)
+        self.pad_token = pad_token
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, index) -> Any:
+        sample = self.data[index]
+        mask = torch.ones_like(sample)
+        mask[sample == self.pad_token] = 0
+        return sample, mask
