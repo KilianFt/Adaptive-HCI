@@ -11,7 +11,7 @@ class AutoDrawerConfig(BaseModel):
     canvas_size: int = 30 # size to reduce stroke to (project to canvas_size x canvas_size grid)
     batch_size: int = 32
     num_workers: int = 8
-    epochs: int = 10
+    epochs: int = 20
     lr: float = 1e-3
     embedding_dimension: int = 256
     max_sequence_length: int = 200
@@ -21,6 +21,8 @@ class AutoDrawerConfig(BaseModel):
     dropout_rate: float = 0.1
     gradient_clip_val: float = 0.5
     criterion_key: str = 'crossentropy'
+    pad_token: int = 5
+    eos_token: int = 4
 
     hostname: str = "mila"
     # hostname: str = ""
@@ -48,7 +50,6 @@ class AutoDrawerSmokeConfig(AutoDrawerConfig):
     # sweep_config: str = ""
     num_workers: int = 1
     epochs: int = 1
-    batch_size: int = 1
 
 
 def fail_early():
