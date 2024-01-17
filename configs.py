@@ -114,23 +114,6 @@ class SmokeConfig(BaseConfig):
                                                                       first_training_episode=0, num_workers=0))
 
 
-class DataSpec(BaseModel):
-    use_motor_traces: bool
-    trace_noise_scale: float
-    points_in_motor_sequence: int = constants.POINTS_IN_MOTOR_SEQUENCE
-    image_side: int = constants.IMAGE_SIDE
-    image_channels: int = 1
-    text_dataset_path: str = constants.TEXT_DATASET_PATH
-    max_dataset_size: Optional[int] = None
-    test_fraction: float = 0.2
-    img_path = constants.IMG_PATH
-    traces_path = constants.TRACES_PATH
-    train_reps = tuple(range(1, 18))
-    test_reps = tuple(range(18, 21))
-    token_context_len = 18
-
-
 def fail_early():
     a = SmokeConfig()
     b = BaseConfig()
-    c = DataSpec(use_images=True, use_motor_traces=True, trace_noise_scale=0.1)

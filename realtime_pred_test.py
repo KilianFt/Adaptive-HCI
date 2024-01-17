@@ -1,5 +1,4 @@
 # real-time prediction with torch model
-
 '''
 Can plot EMG data in 2 different ways
 change DRAW_LINES to try each.
@@ -20,6 +19,39 @@ emg_max = 127
 
 # ------------ Myo Setup ---------------
 q = multiprocessing.Queue()
+
+
+# Simulated
+class Myo:
+    def __init__(self, _):
+        self.emg_handlers = []
+        self.battery_handlers = []
+
+    def connect(self):
+        print("Simulated Myo Connected")
+        # Simulate battery handler
+        for handler in self.battery_handlers:
+            handler(100)  # Simulate full battery
+
+    def run(self):
+        while True:
+            # Generate synthetic EMG data
+            synthetic_emg = [random.randint(emg_min, emg_max) for _ in range(8)]
+            for handler in self.emg_handlers:
+                handler(synthetic_emg, None)
+            time.sleep(0.01)  # Delay to simulate real-time data streaming
+
+    def vibrate(self, pattern):
+        print(f"Vibrating with pattern: {pattern}")
+
+    def set_leds(self, color1, color2):
+        print(f"LEDs set to {color1} and {color2}")
+
+    def add_emg_handler(self, handler):
+        self.emg_handlers.append(handler)
+
+    def add_battery_handler(self, handler):
+        self.battery_handlers.append(handler)
 
 
 def worker(q):

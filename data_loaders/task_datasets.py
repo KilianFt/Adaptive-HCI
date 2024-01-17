@@ -11,14 +11,14 @@ import transformers
 from torch.utils.data import Dataset
 
 import constants
-from configs import DataSpec
 
 motor_context = Union[np.ndarray, torch.Tensor]
 
 
-def get_dataloader(data_spec):
-    cache_omniglot_dataset(data_spec)
-    train_dataset = OmniglotDataset(data_spec, repetitions=data_spec.train_reps)
+def get_omniglot_dataset():
+    maybe_download("images", constants.IMG_PATH)
+    maybe_download("strokes", constants.TRACES_PATH)
+    train_dataset = OmniglotDataset()
     return train_dataset
 
 
@@ -49,9 +49,9 @@ def cache_text_dataset():
         f.write(response.text)
 
 
-def cache_omniglot_dataset(data_spec: DataSpec):
-    maybe_download("images", data_spec.img_path)
-    maybe_download("strokes", data_spec.traces_path)
+def cache_omniglot_dataset():
+    maybe_download("images", constants.IMG_PATH)
+    maybe_download("strokes", constants.TRACES_PATH)
 
 
 def maybe_download(file_name: str, path: str):
@@ -67,17 +67,11 @@ def maybe_download(file_name: str, path: str):
 
 
 class OmniglotDataset(Dataset):
-    def __init__(self, data_spec: DataSpec, repetitions: Tuple[int, ...]):
-        assert max(repetitions) <= 20
-
-        alphabet_name = "Latin"
-        self.use_motor_traces = data_spec.use_motor_traces
-        file_path = __file__
-        base_path = os.path.dirname(file_path)
-        self.stroke_dir = os.path.join(base_path, constants.TRACES_PATH, "strokes_background", alphabet_name)
+    def __init__(self):
+        base_path = os.path.dirname(__file__)
+        self.stroke_dir = os.path.join(base_path, constants.TRACES_PATH, "strokes_background", "Latin")
         self.dataset_size = self._calculate_dataset_size()
         self.num_chars = len(os.listdir(self.stroke_dir))
-        self.repetitions = repetitions
 
     def _calculate_dataset_size(self) -> int:
         num_strokes = sum([len(subfolder) for subfolder in os.listdir(self.stroke_dir)])
@@ -98,9 +92,9 @@ class OmniglotDataset(Dataset):
         return motor
 
     def __getitem__(self, char_idx: int):
-
         repetition_idx, char_idx = divmod(char_idx, self.num_chars)
         strokes = self.char_id_to_sample(char_idx, repetition_idx)
+        strokes = [c[:, :2] for c in strokes]  # Remove timestamp
         return strokes
 
     def char_id_to_sample(self, character_id, rep_idx) -> motor_context:
@@ -240,25 +234,6 @@ class LineByLineTextDataset(transformers.LineByLineTextDataset):
         with open(file_path, encoding="utf-8") as f:
             lines = [line for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
         self.examples = lines
-
-
-def main():
-    data_spec = DataSpec(
-        use_images=False,  # True,
-        use_motor_traces=True,
-        trace_noise_scale=0.05,
-    )
-    train_omniglot_dataset, test_omniglot_dataset = get_omniglot_dataset(data_spec)
-
-    train_dataloader = torch.utils.data.DataLoader(
-        train_dataset,
-        batch_size=32,
-        num_workers=0,
-        shuffle=True,
-    )
-    for batch in train_dataloader:
-        print(batch)
-        break
 
 
 if __name__ == "__main__":
