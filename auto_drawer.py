@@ -14,8 +14,8 @@ from adaptive_hci.controllers import (
     LightningAutoregressor,
     AutoregressiveWrapper,
     LanguageModel,
-    get_device,
 )
+from adaptive_hci.utils import get_accelerator
 from auto_drawer_config import AutoDrawerConfig, AutoDrawerSmokeConfig
 
 
@@ -45,8 +45,8 @@ def get_dataloaders(
     val_dataset = MaskedTokensDataset(
         val_list, max_token_len=max_sequence_length, pad_token=pad_token
     )
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size)
-    val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, num_workers=11)
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, num_workers=11)
     return train_dataloader, val_dataloader
 
 
@@ -78,8 +78,8 @@ def train(config):
             dropout_rate=config.dropout_rate,
             max_sequence_length=config.max_sequence_length,
         )
-    ).to(get_device())
-    pl_model = LightningAutoregressor(model=model, lr=config.lr)
+    ).to(get_accelerator())
+    pl_model = LightningAutoregressor(model=model, lr=config.lr, n_tokens=config.number_of_tokens)
     trainer = pl.Trainer(
         max_epochs=config.epochs,
         gradient_clip_val=config.gradient_clip_val,
@@ -119,7 +119,7 @@ def plot_encoded_moves(encoded_moves, move_map, canvas_size=120, save_img=True):
 def generate(
     model, config, start_tokens=None, temperature=1.0, max_tokens_to_generate=100
 ):
-    model = model.to(get_device())
+    model = model.to(get_accelerator())
     padding_token = config.pad_token
     eos_token = config.eos_token
 
@@ -135,7 +135,7 @@ def generate(
             padding_token=padding_token,
         ),
         dtype=torch.long,
-    ).to(get_device())
+    ).to(get_accelerator())
 
     num_dims = len(input_tensor.shape)
 
@@ -171,16 +171,16 @@ def generate(
 
 
 def main():
-    _ = wandb.run(project="adaptive-hci", tags=["auto_drawer"])
+    _ = wandb.init(project="adaptive-hci", tags=["auto_drawer"])
     config = AutoDrawerConfig(**wandb.config)
     # config = AutoDrawerSmokeConfig()
     pl_model = train(config)
 
-    torch.save(pl_model.model, "models/drawer_test.pt")
+    # torch.save(pl_model.model, "models/drawer_test.pt")
 
-    generated_tokens = generate(pl_model.model, config)
-    move_map = [[-1, 0], [0, -1], [1, 0], [0, 1], [0, 0]]
-    plot_encoded_moves(generated_tokens, move_map, canvas_size=100)
+    # generated_tokens = generate(pl_model.model, config)
+    # move_map = [[-1, 0], [0, -1], [1, 0], [0, 1], [0, 0]]
+    # plot_encoded_moves(generated_tokens, move_map, canvas_size=100)
 
 
 if __name__ == "__main__":

@@ -9,6 +9,8 @@ import lightning.pytorch as pl
 from torchmetrics import ExactMatch, F1Score, Accuracy
 from vit_pytorch import ViT
 
+from adaptive_hci.utils import get_accelerator
+
 
 class EMGViT(ViT):
     def __init__(self, *args, **kwargs):
@@ -122,12 +124,6 @@ class PLModel(pl.LightningModule):
 # drawing model
 # inspired from https://github.com/wingedsheep/transformer/blob/main/main.py#L496
 
-
-def get_device():
-    # FIXME move to utils
-    return 'mps'#torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
 class TokenEmbedding(torch.nn.Module):
     """
     PyTorch module that converts tokens into embeddings.
@@ -178,7 +174,7 @@ class PositionalEncoding(torch.nn.Module):
                     positional_encoding[pos, i + 1] = np.cos(pos / (10000 ** ((2 * i) / self.d_model)))
 
         # Convert numpy array to PyTorch tensor and return it
-        return torch.from_numpy(positional_encoding).float().to(get_device())
+        return torch.from_numpy(positional_encoding).float().to(get_accelerator())
 
     def forward(self, x):
         """
@@ -530,7 +526,7 @@ class LanguageModel(torch.nn.Module):
             dropout_rate=checkpoint['dropout_rate']
         )
         model.load_state_dict(checkpoint['model_state_dict'])
-        return model.to(get_device())
+        return model.to(get_accelerator())
 
 
 class AutoregressiveWrapper(torch.nn.Module):
@@ -574,17 +570,18 @@ class AutoregressiveWrapper(torch.nn.Module):
     @staticmethod
     def load_checkpoint(path) -> 'AutoregressiveWrapper':
         model = LanguageModel.load_checkpoint(path)
-        return AutoregressiveWrapper(model).to(get_device())
+        return AutoregressiveWrapper(model).to(get_accelerator())
 
 
 class LightningAutoregressor(pl.LightningModule):
-    def __init__(self, model, lr, metric_prefix=''):
+    def __init__(self, model, lr, n_tokens, metric_prefix=''):
         super(LightningAutoregressor, self).__init__()
         self.save_hyperparameters(ignore=['model'])
         self.model = model
         self.lr = lr
         self.metric_prefix = metric_prefix
         self.criterion = nn.CrossEntropyLoss()
+        self.accuracy_metric = Accuracy(task="multiclass", num_classes=n_tokens)
         self.step_count = 0
 
     def training_step(self, batch: Tuple[Tensor, Tensor], batch_idx: int) -> Tensor:
@@ -600,7 +597,9 @@ class LightningAutoregressor(pl.LightningModule):
         sample, mask = batch
         out, target = self.model(sample, mask)
         val_loss = self.criterion(out.transpose(1,2), target)
+        val_acc = self.accuracy_metric(out.transpose(1,2), target)
         self.log(f'{self.metric_prefix}validation/loss', val_loss, prog_bar=True)
+        self.log(f'{self.metric_prefix}validation/acc', val_acc, prog_bar=True)
         self.log(f'{self.metric_prefix}validation/step', self.step_count, prog_bar=True)
         return val_loss
     
