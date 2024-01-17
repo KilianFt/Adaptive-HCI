@@ -115,7 +115,6 @@ class SmokeConfig(BaseConfig):
 
 
 class DataSpec(BaseModel):
-    use_images: bool
     use_motor_traces: bool
     trace_noise_scale: float
     points_in_motor_sequence: int = constants.POINTS_IN_MOTOR_SEQUENCE
