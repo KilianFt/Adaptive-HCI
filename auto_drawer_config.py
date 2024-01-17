@@ -8,10 +8,10 @@ class AutoDrawerConfig(BaseModel):
     config_type: str = 'base'
     seed: int = 1000
     save_checkpoints: bool = False
-    canvas_size: int = 30 # size to reduce stroke to (project to canvas_size x canvas_size grid)
+    canvas_size: int = 50 # size to reduce stroke to (project to canvas_size x canvas_size grid)
     batch_size: int = 32
     num_workers: int = 8
-    epochs: int = 20
+    epochs: int = 60
     lr: float = 1e-3
     embedding_dimension: int = 256
     max_sequence_length: int = 200
@@ -24,10 +24,10 @@ class AutoDrawerConfig(BaseModel):
     pad_token: int = 5
     eos_token: int = 4
 
-    hostname: str = "mila"
-    # hostname: str = ""
-    sweep_config: str = "sweep.yaml"
-    # sweep_config: str = ""
+    # hostname: str = "mila"
+    hostname: str = ""
+    # sweep_config: str = "sweeps/auto_drawer_sweep.yaml"
+    sweep_config: str = ""
     proc_num: int = 1
 
     class Config:

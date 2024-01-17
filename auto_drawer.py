@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import wandb
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
@@ -53,7 +54,7 @@ def train(config):
     # TODO
     # - sweep parameters (intergrate with buddy mila cluster)
 
-    pl_logger = WandbLogger(project="adaptive-hci", tags=["auto_drawer"], config=config)
+    pl_logger = WandbLogger(config=config)
 
     pl.seed_everything(config.seed)
 
@@ -114,7 +115,7 @@ def plot_encoded_moves(encoded_moves, move_map, canvas_size=120, save_img=True):
     moves = [move_map[x] for x in encoded_moves]
     plot_moves(moves, canvas_size=canvas_size, save_img=save_img)
 
-
+# TODO add accuracy metric
 def generate(
     model, config, start_tokens=None, temperature=1.0, max_tokens_to_generate=100
 ):
@@ -170,7 +171,8 @@ def generate(
 
 
 def main():
-    config = AutoDrawerConfig()
+    _ = wandb.run(project="adaptive-hci", tags=["auto_drawer"])
+    config = AutoDrawerConfig(**wandb.config)
     # config = AutoDrawerSmokeConfig()
     pl_model = train(config)
 

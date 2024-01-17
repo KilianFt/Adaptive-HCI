@@ -1,0 +1,26 @@
+program: auto_drawer.py
+method: bayes
+metric:
+  name: val_acc
+  goal: maximize
+parameters:
+  number_of_layers:
+    min: 1
+    max: 6
+  number_of_heads:
+    min: 1
+    max: 6
+  dropout_rate:
+    min: 0.0
+    max: .5
+  lr:
+    distribution: log_uniform_values
+    min: 0.0001
+    max: 0.001
+  batch_size:
+    values: [ 32, 64, 128, 254, 512 ]
+  epochs:
+    values: [ 50, 100, 150 ]
+  embedding_dimension:
+    values: [ 32, 64, 128, 254 ]
+
