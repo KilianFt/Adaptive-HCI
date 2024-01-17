@@ -21,38 +21,39 @@ from auto_drawer_config import AutoDrawerConfig, AutoDrawerSmokeConfig
 
 def get_dataloaders(
     omniglot_dir,
-    canvas_size,
-    max_sequence_length,
-    batch_size,
+    config,
     max_initial_value=120,
-    eos_token=4,
-    pad_token=5,
 ):
     encoded_moves_data = get_omniglot_moves(
-        omniglot_dir, canvas_size=canvas_size, max_initial_value=max_initial_value
+        omniglot_dir,
+        canvas_size=config.canvas_size,
+        max_initial_value=max_initial_value,
     )
 
-    # TODO do I need this?
     encoded_data_with_stop = [
-        torch.cat((x, torch.tensor([eos_token]))) for x in encoded_moves_data
+        torch.cat((x, torch.tensor([config.eos_token]))) for x in encoded_moves_data
     ]
 
     train_list, val_list = train_test_split(encoded_data_with_stop)
 
     train_dataset = MaskedTokensDataset(
-        train_list, max_token_len=max_sequence_length, pad_token=pad_token
+        train_list, max_token_len=config.max_sequence_length, pad_token=config.pad_token
     )
     val_dataset = MaskedTokensDataset(
-        val_list, max_token_len=max_sequence_length, pad_token=pad_token
+        val_list, max_token_len=config.max_sequence_length, pad_token=config.pad_token
     )
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, num_workers=11)
-    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, num_workers=11)
+    train_dataloader = DataLoader(
+        train_dataset, batch_size=config.batch_size, num_workers=config.num_workers
+    )
+    val_dataloader = DataLoader(
+        val_dataset, batch_size=config.batch_size, num_workers=config.num_workers
+    )
     return train_dataloader, val_dataloader
 
 
 def train(config):
     # TODO
-    # - sweep parameters (intergrate with buddy mila cluster)
+    # - intergrate with buddy mila cluster
 
     pl_logger = WandbLogger(config=config)
 
@@ -61,12 +62,7 @@ def train(config):
     omniglot_dir = Path("./datasets/omniglot")
     train_dataloader, val_dataloader = get_dataloaders(
         omniglot_dir,
-        config.canvas_size,
-        config.max_sequence_length,
-        config.batch_size,
-        config.num_workers,
-        eos_token=config.eos_token,
-        pad_token=config.pad_token,
+        config,
     )
 
     model = AutoregressiveWrapper(
@@ -79,7 +75,9 @@ def train(config):
             max_sequence_length=config.max_sequence_length,
         )
     ).to(get_accelerator())
-    pl_model = LightningAutoregressor(model=model, lr=config.lr, n_tokens=config.number_of_tokens)
+    pl_model = LightningAutoregressor(
+        model=model, lr=config.lr, n_tokens=config.number_of_tokens
+    )
     trainer = pl.Trainer(
         max_epochs=config.epochs,
         gradient_clip_val=config.gradient_clip_val,
@@ -115,7 +113,7 @@ def plot_encoded_moves(encoded_moves, move_map, canvas_size=120, save_img=True):
     moves = [move_map[x] for x in encoded_moves]
     plot_moves(moves, canvas_size=canvas_size, save_img=save_img)
 
-# TODO add accuracy metric
+
 def generate(
     model, config, start_tokens=None, temperature=1.0, max_tokens_to_generate=100
 ):
