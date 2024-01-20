@@ -1,10 +1,9 @@
-from pathlib import Path
-
 import torch
+
 from autowriter.mingpt.model import GPT
 from autowriter.mingpt.trainer import Trainer
+from autowriter.datasets import OmniglotGridDataset
 
-from adaptive_hci.datasets import OmniglotGridDataset
 from configs import AutoWriterConfig
 
 
