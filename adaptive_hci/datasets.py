@@ -689,6 +689,7 @@ def pad_data(data, pad_token, context_len):
 class OmniglotGridDataset(Dataset):
     def __init__(self, omniglot_dir, context_len=200, pad_token=5, canvas_size=50,
                  max_initial_value=120, eos_token=4, char_idxs=[12, 15]):
+        omniglot_dir = Path(omniglot_dir)
         omniglot_data = get_omniglot_moves(
             omniglot_dir,
             canvas_size=canvas_size,
@@ -703,6 +704,14 @@ class OmniglotGridDataset(Dataset):
 
         self.data = data_w_pad
         self.pad_token = pad_token
+        self.context_len = context_len
+        self.vocab_size = len(data_w_pad.unique())
+
+    def get_vocab_size(self):
+        return self.vocab_size
+
+    def get_block_size(self):
+        return self.context_len
 
     def __len__(self):
         return len(self.data)

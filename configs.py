@@ -1,6 +1,6 @@
 import hashlib
 import pickle
-from typing import Literal, Optional
+from typing import Literal, Optional, List
 
 import pydantic
 from pydantic import Field, Extra
@@ -68,6 +68,16 @@ class ViTConfig(BaseModel):
     dropout: float = 0.21
     emb_dropout: float = 0.1735
     channels: int = 1
+
+
+class AutoWriterConfig(BaseModel):
+    omniglot_dir: str = "./datasets/omniglot"
+    model_type: str = 'gpt-mini'
+    lr: float = 5e-4
+    max_iters: int = 10_000
+    batch_size: int = 32
+    context_len: int = 100
+    character_idxs: Optional[List[str]] = [12, 15] # None # e.g. [12, 15] for o and l
 
 
 class BaseConfig(BaseModel):
