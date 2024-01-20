@@ -567,13 +567,17 @@ def num2str(idx):
 	return str(idx)
 
 
-def get_raw_omniglot_dataset(stroke_dir, img_dir):
+def get_raw_omniglot_dataset(stroke_dir, img_dir, char_idxs=None):
     # TODO remove img?
     n_characters = len([x for x in img_dir.glob('*')])
 
     dataset = []
-    for char_int in range(1, n_characters + 1):
-        character_id = num2str(char_int)
+    if char_idxs is None:
+        char_iter = range(1, n_characters + 1)
+    else:
+        char_iter = char_idxs
+    for char_idx in char_iter:
+        character_id = num2str(char_idx)
         stroke_char_dir = stroke_dir / ('character' + character_id)
         img_char_dir = img_dir / ('character' + character_id)
 
@@ -596,7 +600,6 @@ def get_raw_omniglot_dataset(stroke_dir, img_dir):
 
 
 def sequence_to_moves(sequence, canvas_size=30, max_initial_value=120):
-    # TODO make parameter for step size
     sequence = (sequence / max_initial_value) * canvas_size
     sequence = sequence.astype(np.int32)
 
@@ -650,10 +653,10 @@ def encode_moves(moves_data, move_map):
     return encoded_moves_data    
 
 
-def get_omniglot_moves(omniglot_dir: Path, canvas_size: int = 30, max_initial_value: int = 120):
+def get_omniglot_moves(omniglot_dir: Path, canvas_size: int = 30, max_initial_value: int = 120, char_idxs=None):
     img_dir = omniglot_dir / 'python' / 'images_background' / 'Latin'
     stroke_dir = omniglot_dir / 'python' / 'strokes_background' / 'Latin'
-    raw_dataset = get_raw_omniglot_dataset(stroke_dir, img_dir)
+    raw_dataset = get_raw_omniglot_dataset(stroke_dir, img_dir, char_idxs=char_idxs)
     moves_data = omniglot_dataset_to_moves(raw_dataset, canvas_size=canvas_size,
                                            max_initial_value=max_initial_value)
 
@@ -666,26 +669,39 @@ def get_omniglot_moves(omniglot_dir: Path, canvas_size: int = 30, max_initial_va
     return encoded_moves_data
 
 
-def pad_data(data, pad_token, max_token_len):
+def pad_data(data, pad_token, context_len):
+    token_len_plus_label = context_len + 1
     padded_data = []
     for sample in data:
         sample_len = len(sample)
-        if sample_len < max_token_len:
-            pad_len = max_token_len - sample_len
+        if sample_len < token_len_plus_label:
+            pad_len = token_len_plus_label - sample_len
             padding = torch.zeros(pad_len) + pad_token
             padded_sample = torch.cat((sample, padding))
 
         else:
-            padded_sample = sample[:max_token_len]
+            padded_sample = sample[:token_len_plus_label]
         padded_data.append(padded_sample)
 
     return torch.stack(padded_data).type(torch.long)
+    
 
+class OmniglotGridDataset(Dataset):
+    def __init__(self, omniglot_dir, context_len=200, pad_token=5, canvas_size=50,
+                 max_initial_value=120, eos_token=4, char_idxs=[12, 15]):
+        omniglot_data = get_omniglot_moves(
+            omniglot_dir,
+            canvas_size=canvas_size,
+            max_initial_value=max_initial_value,
+            char_idxs=char_idxs,
+        )
 
-class MaskedTokensDataset(Dataset):
-    def __init__(self, data, max_token_len, pad_token=99):
-        # TODO make sure type == torch.long
-        self.data = pad_data(data, pad_token, max_token_len)
+        data_w_stop = [
+            torch.cat((x, torch.tensor([eos_token]))).type(torch.long) for x in omniglot_data
+        ]
+        data_w_pad = pad_data(data_w_stop, pad_token, context_len)
+
+        self.data = data_w_pad
         self.pad_token = pad_token
 
     def __len__(self):
@@ -693,6 +709,8 @@ class MaskedTokensDataset(Dataset):
 
     def __getitem__(self, index) -> Any:
         sample = self.data[index]
-        mask = torch.ones_like(sample)
-        mask[sample == self.pad_token] = 0
-        return sample, mask
+        x = sample[:-1].clone()
+        y = sample[1:].clone()
+        # mask where y is pad
+        y[y==self.pad_token] = -1
+        return x, y
