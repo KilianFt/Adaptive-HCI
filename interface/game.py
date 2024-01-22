@@ -1,9 +1,11 @@
+import os
 import dataclasses
 import pickle
 import multiprocessing
 import random
 import string
 import sys
+from datetime import datetime
 
 import PyQt5.QtCore
 import PyQt5.QtGui
@@ -17,8 +19,9 @@ from realtime_pred_test import worker
 
 # Constants
 WIDTH, HEIGHT = 500, 500
-ALLOWED_TASKS = [ord(c) - ord('a') for c in 'io']
+ALLOWED_TASKS = [ord(c) - ord('a') for c in 'lo']
 SUGGESTION_WIDTH = 5
+X_OFFSET = 30 # to make sure that there is space between stroke prompt and border
 
 event_code_map = {
     PyQt5.QtGui.QMouseEvent.MouseButtonPress: PyQt5.QtGui.QTabletEvent.TabletPress,
@@ -61,6 +64,11 @@ class Interface(PyQt5.QtWidgets.QWidget):
         game_state, new_task = self.reset()
         self.current_task = new_task
         self.game_state = game_state
+        self.trace_count = 0
+        now = datetime.now()
+        dt_string = now.strftime("%Y_%m_%d_%H_%M_%S")
+        self.out_folder = f"./datasets/emg_writing/{dt_string}/"
+        os.makedirs(self.out_folder)
 
     def _transition(self, pen_x, pen_y, pen_is_down):
         if pen_is_down:
@@ -104,8 +112,10 @@ class Interface(PyQt5.QtWidgets.QWidget):
         if terminate:
             new_state, current_task = self.reset()
             self.traces[current_task].append([])
-            with open("traces.pkl", "wb") as f:
+            out_file = self.out_folder + f"traces{self.trace_count}.pkl"
+            with open(out_file, "wb") as f:
                 pickle.dump(self.traces, f)
+            self.trace_count += 1
 
     def reset(self):
         current_task = random.choice(ALLOWED_TASKS)
@@ -114,6 +124,7 @@ class Interface(PyQt5.QtWidgets.QWidget):
         self.canvas.fill(255)
         for stroke in normalized_char_strokes:
             for x, y in stroke:
+                x = x + X_OFFSET
                 self.canvas[y:y + SUGGESTION_WIDTH, x:x + SUGGESTION_WIDTH] = 0
 
         return GameState(pen=(0, 0), emg=np.array([])), current_task

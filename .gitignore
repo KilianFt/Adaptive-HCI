@@ -17,3 +17,5 @@ lightning_logs/
 test.ipynb
 /runs/
 /interface/data/
+data_loaders/data/
+data/

@@ -69,7 +69,7 @@ def maybe_download(file_name: str, path: str):
 class OmniglotDataset(Dataset):
     def __init__(self):
         base_path = os.path.dirname(__file__)
-        self.stroke_dir = os.path.join(base_path, constants.TRACES_PATH, "strokes_background", "Latin")
+        self.stroke_dir = os.path.join(os.path.dirname(base_path), constants.TRACES_PATH, "strokes_background", "Latin")
         self.dataset_size = self._calculate_dataset_size()
         self.num_chars = len(os.listdir(self.stroke_dir))
 
@@ -234,7 +234,3 @@ class LineByLineTextDataset(transformers.LineByLineTextDataset):
         with open(file_path, encoding="utf-8") as f:
             lines = [line for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
         self.examples = lines
-
-
-if __name__ == "__main__":
-    main()
