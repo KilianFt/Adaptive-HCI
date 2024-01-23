@@ -4,6 +4,7 @@ import os
 import sys
 import random
 import collections
+import dataclasses
 
 import torch
 import numpy as np
@@ -18,6 +19,13 @@ train_users = [
     hashlib.sha256("Kilian".encode("utf-8")).hexdigest()[:15],
     # hashlib.sha256("Manuel".encode("utf-8")).hexdigest()[:15],
 ]
+
+
+# FIXME remove this when interface is merged
+@dataclasses.dataclass
+class GameState:
+    pen: tuple[int, int]
+    emg: np.ndarray
 
 
 def get_user_results(user_metrics):
@@ -39,6 +47,8 @@ def main():
     else:
         experiment_config = configs.BaseConfig()
 
+    experiment_config = configs.SmokeConfig()
+
     try:
         entity = "delvermm" if "delverm" in os.getlogin() else "kilian"
     except OSError:  # Happens on mila cluster
@@ -50,12 +60,13 @@ def main():
     logger, experiment_config = buddy_setup(experiment_config, entity=entity)
 
     general_model = train_general_model.main(logger, experiment_config)
-
     population_metrics = collections.defaultdict(list)
 
     for user_hash in train_users:
         initial_model = copy.deepcopy(general_model)
         finetuned_user_model = finetune_user_model.main(initial_model, user_hash, experiment_config)
+        return
+
         user_model, user_metrics = continuously_train_user_model.main(finetuned_user_model, user_hash, experiment_config)
 
         user_results = get_user_results(user_metrics)
