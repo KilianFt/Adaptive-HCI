@@ -12,11 +12,14 @@ from adaptive_hci import utils
 
 
 def load_finetune_dataloader(config):
-    emg_draw_data_dir = pathlib.Path('./datasets/emg_writing_o_l/')
-    emg_writing_ids_file = './datasets/emg_writing_file_names.txt'
+    file_path = pathlib.Path(__file__).resolve()
+    print(file_path)
+    emg_draw_data_dir = file_path.parent / 'datasets' / 'emg_writing_o_l/'
+    emg_writing_ids_file = file_path.parent / 'emg_writing_file_names.txt'
     with open(emg_writing_ids_file, 'rb') as f:
         file_ids = f.readlines()
     file_ids = [file_id.decode().strip() for file_id in file_ids]
+    print(file_ids)
     maybe_download_drive_folder(emg_draw_data_dir, file_ids)
 
     observations, actions = load_emg_writing_data(emg_draw_data_dir, window_size=config.window_size, overlap=config.overlap)
