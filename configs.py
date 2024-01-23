@@ -105,7 +105,7 @@ class BaseConfig(BaseModel):
 
         super().__init__(**data)
         if self.sweep_config:
-            self.proc_num = 8
+            self.proc_num = 1
 
     def __str__(self):
         arg_str = pickle.dumps(self.dict())
