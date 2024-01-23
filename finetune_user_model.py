@@ -1,24 +1,35 @@
-import os
 import pathlib
-import sys
 
 import lightning.pytorch as pl
-import torch
 from lightning.pytorch import LightningModule
 from lightning.pytorch.loggers import WandbLogger
 from torch.utils.data import DataLoader
+from sklearn.model_selection import train_test_split
 
 import configs
-from adaptive_hci.datasets import get_concatenated_user_episodes, to_tensor_dataset, get_stored_sessions
+from adaptive_hci.datasets import load_emg_writing_data, to_tensor_class_dataset, maybe_download_drive_folder
 from adaptive_hci import utils
 
 
-finetune_user_ids = [
-    "1Sitb0ooo2izvkHQGNQkXTGoDV4CJAnFF",
-    "1bIYLJVu-SqHzRnTFxuc1vkzRBs8Ll5Oi",
-    "1D7h11vheJ7Oq8Ju4ik8jqBJUocEie-rQ",
-    "1EWJdHHZ22xorZEpss-gf5R4cxehEs9pt",
-]
+def load_finetune_dataloader(config):
+    emg_draw_data_dir = pathlib.Path('./datasets/emg_writing_o_l/')
+    emg_writing_ids_file = './datasets/emg_writing_file_names.txt'
+    with open(emg_writing_ids_file, 'rb') as f:
+        file_ids = f.readlines()
+    file_ids = [file_id.decode().strip() for file_id in file_ids]
+    maybe_download_drive_folder(emg_draw_data_dir, file_ids)
+
+    observations, actions = load_emg_writing_data(emg_draw_data_dir, window_size=config.window_size, overlap=config.overlap)
+
+    train_observations, val_observations, train_optimal_actions, val_optimal_actions = train_test_split(observations, actions, test_size=0.25)
+
+    train_offline_adaption_dataset = to_tensor_class_dataset(train_observations, train_optimal_actions)
+    val_offline_adaption_dataset = to_tensor_class_dataset(val_observations, val_optimal_actions)
+
+    dataloader_args = dict(batch_size=config.finetune.batch_size, num_workers=config.finetune.num_workers)
+    train_dataloader = DataLoader(train_offline_adaption_dataset, shuffle=True, **dataloader_args)
+    val_dataloader = DataLoader(val_offline_adaption_dataset, **dataloader_args)
+    return train_dataloader, val_dataloader
 
 
 def main(model: LightningModule, user_hash, config: configs.BaseConfig) -> LightningModule:
@@ -29,25 +40,7 @@ def main(model: LightningModule, user_hash, config: configs.BaseConfig) -> Light
     logger = WandbLogger(project='adaptive_hci', tags=["finetune", user_hash], config=config,
                          name=f"finetune_{config}_{user_hash[:15]}")
 
-    episode_list = get_stored_sessions(stage="Data", num_episodes=config.finetune.num_episodes, file_ids=finetune_user_ids)
-
-    train_episodes = []
-    for ep in episode_list[:-1]:
-        train_episodes += ep
-
-    val_episodes = episode_list[-1]
-
-    train_observations, _, train_optimal_actions, _, _ = get_concatenated_user_episodes(episodes=train_episodes)
-
-    val_observations, _, val_optimal_actions, _, _ = get_concatenated_user_episodes(episodes=val_episodes)
-
-    train_offline_adaption_dataset = to_tensor_dataset(train_observations, train_optimal_actions)
-    val_offline_adaption_dataset = to_tensor_dataset(val_observations, val_optimal_actions)
-
-    dataloader_args = dict(batch_size=config.finetune.batch_size, num_workers=config.finetune.num_workers)
-
-    train_dataloader = DataLoader(train_offline_adaption_dataset, shuffle=True, **dataloader_args)
-    val_dataloader = DataLoader(val_offline_adaption_dataset, **dataloader_args)
+    train_dataloader, val_dataloader = load_finetune_dataloader(config)
 
     model.lr = config.finetune.lr
     model.freeze_layers(config.finetune.n_frozen_layers)
@@ -62,27 +55,3 @@ def main(model: LightningModule, user_hash, config: configs.BaseConfig) -> Light
     trainer.fit(model=model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 
     return model
-
-
-if __name__ == '__main__':
-    random_seed = 100
-    torch.manual_seed(random_seed)
-
-    sweep_configuration = {
-        'method': 'bayes',
-        'name': 'sweep',
-        'metric': {'goal': 'maximize', 'name': 'test_acc'},
-        'parameters': {
-            'finetune_batch_size': {'values': [16, 32, 64]},
-            'finetune_epochs': {'value': 50},
-            'finetune_lr': {'max': 0.005, 'min': 0.0001},
-            'finetune_n_frozen_layers': {'max': 5, 'min': 0},
-        },
-    }
-
-    if sys.gettrace() is not None:
-        raise NotImplementedError
-    else:
-        raise NotImplementedError
-        sweep_id = wandb.sweep(sweep=sweep_configuration, project="adaptive-hci-offline-adaptation")
-        wandb.agent(sweep_id, function=main, count=10)

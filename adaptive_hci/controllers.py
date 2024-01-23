@@ -21,6 +21,8 @@ def get_criterion(criterion_key):
         return torch.nn.MSELoss()
     elif criterion_key == 'bce':
         return torch.nn.BCEWithLogitsLoss()
+    elif criterion_key == 'ce':
+        return torch.nn.CrossEntropyLoss()
     else:
         raise NotImplementedError(f"{criterion_key} loss not supported")
 
@@ -97,7 +99,7 @@ class PLModel(pl.LightningModule):
         val_acc = self.exact_match(outputs, targets)
         val_f1 = self.f1_score(outputs, targets)
         one_match = multilabel_at_least_one_match(y_true=targets, y_pred=outputs)
-        val_loss = F.mse_loss(outputs, targets)
+        val_loss = self.criterion(outputs, targets)
         self.log(f'{self.metric_prefix}validation/loss', val_loss, prog_bar=True)
         self.log(f'{self.metric_prefix}validation/acc', val_acc, prog_bar=True)
         self.log(f'{self.metric_prefix}validation/f1', val_f1, prog_bar=True)
@@ -112,3 +114,24 @@ class PLModel(pl.LightningModule):
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.lr)
+
+
+class SingleLabelPlModel(PLModel):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.accuracy_metric = Accuracy(task="multiclass", num_classes=kwargs["n_labels"])
+
+
+    def validation_step(self, batch, batch_idx):
+        data, targets = batch
+        outputs = self.model(data)
+        val_loss = self.criterion(outputs, targets)
+
+        out_preds = F.softmax(outputs, dim=-1).argmax(-1).type(torch.long)
+        val_acc = self.accuracy_metric(out_preds, targets)
+
+        self.log(f'{self.metric_prefix}validation/loss', val_loss, prog_bar=True)
+        self.log(f'{self.metric_prefix}validation/acc', val_acc, prog_bar=True)
+        self.log(f'{self.metric_prefix}validation/step', self.step_count, prog_bar=True)
+
+        return val_loss, val_acc

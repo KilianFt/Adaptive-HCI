@@ -7,7 +7,7 @@ from lightning.pytorch import LightningModule
 import configs
 from adaptive_hci import utils
 from adaptive_hci.datasets import CombinedDataset, EMGWindowsDataset
-from adaptive_hci.controllers import EMGViT, PLModel
+from adaptive_hci.controllers import EMGViT, SingleLabelPlModel
 from common import DataSourceEnum
 
 
@@ -64,7 +64,7 @@ def main(logger, experiment_config: configs.BaseConfig) -> LightningModule:
     vit = EMGViT(
         image_size=experiment_config.window_size,
         patch_size=experiment_config.general_model_config.patch_size,
-        num_classes=n_labels,
+        num_classes=experiment_config.num_classes,#n_labels,
         dim=experiment_config.general_model_config.dim,
         depth=experiment_config.general_model_config.depth,
         heads=experiment_config.general_model_config.heads,
@@ -74,9 +74,9 @@ def main(logger, experiment_config: configs.BaseConfig) -> LightningModule:
         channels=experiment_config.general_model_config.channels,
     )
 
-    assert experiment_config.criterion_key in ["mse", "bce"], "{experiment_config.criterion_key} loss is supported for now"
+    assert experiment_config.criterion_key in ["mse", "bce", "ce"], "{experiment_config.criterion_key} loss is supported for now"
 
-    pl_model = PLModel(
+    pl_model = SingleLabelPlModel(
         vit,
         n_labels=experiment_config.num_classes,
         lr=experiment_config.pretrain.lr,
