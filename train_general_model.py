@@ -72,6 +72,7 @@ def main(logger, experiment_config: configs.BaseConfig) -> LightningModule:
         dropout=experiment_config.general_model_config.dropout,
         emb_dropout=experiment_config.general_model_config.emb_dropout,
         channels=experiment_config.general_model_config.channels,
+        use_softmax=True, # FIXME
     )
 
     assert experiment_config.loss in ["MSELoss"], "Only MSELoss is supported for now"

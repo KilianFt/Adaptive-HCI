@@ -230,7 +230,7 @@ def maybe_download_mad_dataset(mad_base_dir):
     os.system(f'rm {mad_base_dir}/.lock')
 
 
-def get_mad_windows_dataset(mad_base_dir, _, window_length, overlap):
+def get_mad_windows_dataset(mad_base_dir, _, window_length, overlap, use_onehot_labels=False):
     maybe_download_mad_dataset(mad_base_dir)
 
     train_path = mad_base_dir + 'PreTrainingDataset/'
@@ -268,9 +268,11 @@ def get_mad_windows_dataset(mad_base_dir, _, window_length, overlap):
             mad_windows = np.concatenate((mad_windows, mad_subject_windows))
             mad_labels = np.concatenate((mad_labels, subject_labels))
 
-    mad_onehot_labels = np.array([labels_to_onehot(label) for label in mad_labels])
+    if use_onehot_labels:
+        # FIXME make this a parameter in config file
+        mad_labels = np.array([labels_to_onehot(label) for label in mad_labels])
     print("MAD dataset loaded")
-    return mad_windows, mad_onehot_labels
+    return mad_windows, mad_labels
 
 
 def create_ninapro_windows(X, y, stride, window_length, desired_labels=None):
@@ -456,7 +458,7 @@ class CombinedDataset(data.Dataset):
 
 def load_files(data_dir, filenames):
     online_episodes_list = []
- 
+
     for filename in filenames:
         filepath = data_dir / filename
         with open(filepath, 'rb') as f:

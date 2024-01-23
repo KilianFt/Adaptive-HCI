@@ -6,12 +6,16 @@ from vit_pytorch import ViT
 
 
 class EMGViT(ViT):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, use_softmax=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.use_softmax = use_softmax
 
     def __call__(self, x: torch.Tensor):
         x.unsqueeze_(axis=1)
-        return self.forward(x)
+        x = self.forward(x)
+        if self.use_softmax:
+            x = F.softmax(x, dim=-1)
+        return x
 
 
 class PLModel(pl.LightningModule):

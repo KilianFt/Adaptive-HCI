@@ -23,6 +23,8 @@ def main():
     else:
         experiment_config = configs.BaseConfig()
 
+    experiment_config = configs.SmokeConfig()
+
     try:
         entity = "delvermm" if "delverm" in os.getlogin() else "kilian"
     except OSError:  # Happens on mila cluster
@@ -31,7 +33,7 @@ def main():
     logger, experiment_config = buddy_setup(experiment_config, entity=entity)
 
     general_model = train_general_model.main(logger, experiment_config)
-
+    return
     population_metrics = []
     for user_hash in train_users:
         initial_model = copy.deepcopy(general_model)
