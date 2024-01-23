@@ -1,10 +1,10 @@
 /venv/
-datasets/
 models/
 __pycache__/
 wandb/
 tmp/
 models/
+datasets/
 cache/
 lightning_logs/
 *.pkl
