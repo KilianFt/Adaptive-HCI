@@ -233,13 +233,12 @@ def maybe_download_mad_dataset(mad_base_dir):
             time.sleep(1)
         return
 
-    os.makedirs(mad_base_dir, exist_ok=True)
-
     # create a lock file to prevent multiple downloads
     os.system(f'touch {mad_base_dir}/.lock')
 
     print("Downloading MyoArmbandDataset")
-    os.system(f'git clone https://github.com/UlysseCoteAllard/MyoArmbandDataset {mad_base_dir}')
+    cmd = f'git clone https://github.com/UlysseCoteAllard/MyoArmbandDataset {mad_base_dir}'
+    subprocess.call(cmd, shell=True)
     print("Download finished")
 
     # remove the lock file
@@ -252,8 +251,8 @@ def get_mad_windows_dataset(mad_base_dir, _, window_length, overlap, use_onehot_
     train_path = mad_base_dir + 'PreTrainingDataset/'
     eval_path = mad_base_dir + 'EvaluationDataset/'
 
-    eval_raw_dataset_dict = get_raw_mad_dataset(eval_path, window_length, overlap)
     train_raw_dataset_dict = get_raw_mad_dataset(train_path, window_length, overlap)
+    eval_raw_dataset_dict = get_raw_mad_dataset(eval_path, window_length, overlap)
 
     mad_all_windows = (
             eval_raw_dataset_dict['training0']['examples'] +
