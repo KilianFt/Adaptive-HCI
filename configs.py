@@ -19,7 +19,7 @@ class BaseModel(pydantic.BaseModel):
 class PretrainConfig(BaseModel):
     epochs: int = 50
     batch_size: int = 128
-    lr: float = 0.00083
+    lr: float = 0.0001
     train_fraction: float = Field(0.7, description="% of the data for training")
     num_workers: int = 8
 
@@ -33,11 +33,11 @@ class PretrainConfig(BaseModel):
 
 
 class FinetuneConfig(BaseModel):
-    n_frozen_layers: int = 1
+    n_frozen_layers: int = 0
     num_episodes: Optional[int] = None
-    epochs: int = 70
-    lr: float = 0.0002269
-    batch_size: int = 64
+    epochs: int = 100
+    lr: float = 0.00026
+    batch_size: int = 128
     num_workers: int = 8
     do_finetuning: bool = True
 
@@ -61,13 +61,13 @@ class OnlineConfig(BaseModel):
 
 class ViTConfig(BaseModel):
     base_model_class: str = 'ViT'
-    patch_size: int = 8
-    dim: int = 256
-    depth: int = 2
-    heads: int = 5
-    mlp_dim: int = 256
-    dropout: float = 0.21
-    emb_dropout: float = 0.1735
+    patch_size: int = 4
+    dim: int = 128
+    depth: int = 3
+    heads: int = 2
+    mlp_dim: int = 128
+    dropout: float = 0.3
+    emb_dropout: float = 0.16
     channels: int = 1
 
 
@@ -104,7 +104,6 @@ class BaseConfig(BaseModel):
     sweep_config: str = "sweep.yaml"
     # sweep_config: str = ""
     proc_num: int = 1
-    # loss: str = "MSELoss"
 
     class Config:
         validate_assignment = True
