@@ -93,7 +93,6 @@ class BaseConfig(BaseModel):
     sweep_config: str = "sweep.yaml"
     # sweep_config: str = ""
     proc_num: int = 1
-    # loss: str = "MSELoss"
 
     class Config:
         validate_assignment = True
