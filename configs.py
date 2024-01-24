@@ -93,7 +93,6 @@ class BaseConfig(BaseModel):
     sweep_config: str = "sweep.yaml"
     # sweep_config: str = ""
     proc_num: int = 1
-    # loss: str = "MSELoss"
 
     class Config:
         validate_assignment = True
@@ -105,7 +104,7 @@ class BaseConfig(BaseModel):
 
         super().__init__(**data)
         if self.sweep_config:
-            self.proc_num = 8
+            self.proc_num = 1
 
     def __str__(self):
         arg_str = pickle.dumps(self.dict())

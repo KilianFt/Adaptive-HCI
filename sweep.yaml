@@ -6,89 +6,100 @@ command:
   - ${program}
   - ${args}
 metric:
-  name: population/mean_f1
+  name: 608d423e7c60461/finetune/validation/acc
   goal: maximize
 method: random
 parameters:
   criterion_key:
-    value: 'bce'
+    value: 'ce'
   random_seed:
-    values: [ 4168, 3773, 4181, 2945, 4132, 1405, 4328, 1720, 1691, 78 ]
+    value: 100
   general_model_config:
     parameters:
       patch_size:
-        value: 8
+        values: [ 2, 4, 8 ]
       dim:
-        value: 256
+        values: [ 128, 256, 512 ]
       depth:
-        value: 2
+        min: 1
+        max: 6
       heads:
-        value: 5
+        min: 2
+        max: 6
       mlp_dim:
-        value: 256
+        values: [ 128, 256, 512 ]
       dropout:
-        value: 0.21
+        # value: 0.21
+        min: 0.1
+        max: 0.5
       emb_dropout:
-        value: 0.1735
+        # value: 0.1735
+        min: 0.1
+        max: 0.5
   pretrain:
     parameters:
       epochs:
-        value: 50
+        values: [ 30, 50, 70 ]
       batch_size:
-        value: 128
+        values: [ 64, 128 ]
       lr:
-        value: 0.00083
-      train_fraction:
-        value: 0.7
+        distribution: log_uniform_values
+        min: 0.0001
+        max: 0.001
+      # train_fraction:
+      #   value: 0.7
       do_pretraining:
         value: True
   finetune:
     parameters:
       n_frozen_layers:
-        value: 1
-      num_episodes:
-        value: 10
+        values: [ 0, 1 ]
+      # num_episodes:
+      #   value: 10
       epochs:
-        value: 70
+        values: [ 50, 70, 100 ]
       lr:
-        value: 0.0002269
+        # value: 0.0002269
+        distribution: log_uniform_values
+        min: 0.0001
+        max: 0.001
       batch_size:
-        value: 64
+        values: [ 32, 64, 128 ]
       do_finetuning:
         value: True
-  online:
-    parameters:
-      num_episodes:
-        # value: 30
-        min:
-          1
-        max:
-          30
-      batch_size:
-        value: 5
-        # values: [ 5, 10 ]
-      epochs:
-        value: 20
-      lr:
-        value: 0.00045
-        # distribution: log_uniform_values
-        # min: 0.00008
-        # max: 0.0007
-      num_sessions:
-        value: 3
-      n_frozen_layers:
-        value: 1
-      train_intervals:
-        value: 1
-      first_training_episode:
-        value: 0
-      additional_train_episodes:
-        value: 30
-      adaptive_training:
-        values: [ True, False ]
-      balance_classes:
-        value: False
-      buffer_size:
-        value: 3_000
-      shuffle_episodes:
-        value: True
+  # online:
+  #   parameters:
+  #     num_episodes:
+  #       # value: 30
+  #       min:
+  #         1
+  #       max:
+  #         30
+  #     batch_size:
+  #       value: 5
+  #       # values: [ 5, 10 ]
+  #     epochs:
+  #       value: 20
+  #     lr:
+  #       value: 0.00045
+  #       # distribution: log_uniform_values
+  #       # min: 0.00008
+  #       # max: 0.0007
+  #     num_sessions:
+  #       value: 3
+  #     n_frozen_layers:
+  #       value: 1
+  #     train_intervals:
+  #       value: 1
+  #     first_training_episode:
+  #       value: 0
+  #     additional_train_episodes:
+  #       value: 30
+  #     adaptive_training:
+  #       values: [ True, False ]
+  #     balance_classes:
+  #       value: False
+  #     buffer_size:
+  #       value: 3_000
+  #     shuffle_episodes:
+  #       value: True
