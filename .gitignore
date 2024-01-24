@@ -7,7 +7,7 @@ tmp/
 models/
 cache/
 lightning_logs/
-*.pkl
+# *.pkl
 *.pt
 *.png
 *.jpg
