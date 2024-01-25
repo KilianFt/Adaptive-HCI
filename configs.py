@@ -5,6 +5,7 @@ from typing import Literal, Optional
 import pydantic
 from pydantic import Field, Extra
 
+import constants
 from common import DataSourceEnum
 
 ConfigType = Literal['base', 'smoke']

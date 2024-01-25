@@ -16,3 +16,6 @@ lightning_logs/
 *.ckpt
 test.ipynb
 /runs/
+/interface/data/
+data_loaders/data/
+data/
