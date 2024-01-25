@@ -1,8 +1,15 @@
-import lightning.pytorch as pl
+from typing import Tuple
+
+import numpy as np
 import torch
+from torch import nn, Tensor
 from torch.functional import F
+
+import lightning.pytorch as pl
 from torchmetrics import ExactMatch, F1Score, Accuracy
 from vit_pytorch import ViT
+
+from adaptive_hci.utils import get_accelerator
 
 
 class EMGViT(ViT):

@@ -8,7 +8,7 @@ import torch
 from lightning.pytorch.callbacks import StochasticWeightAveraging
 
 
-def get_accelerator(config_type):
+def get_accelerator(config_type='base'):
     accelerator = 'cuda'
     if config_type == 'smoke':
         accelerator = 'cpu'
