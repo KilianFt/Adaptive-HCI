@@ -81,6 +81,13 @@ def to_tensor_dataset(train_observations, train_actions):
     )
     return ds
 
+def to_tensor_class_dataset(train_observations, train_actions):
+    ds = TensorDataset(
+        torch.tensor(train_observations, dtype=torch.float32),
+        torch.tensor(train_actions, dtype=torch.long)
+    )
+    return ds
+
 
 def get_terminals(episodes, rewards):
     terminals = np.zeros(rewards.shape[0])
@@ -226,27 +233,26 @@ def maybe_download_mad_dataset(mad_base_dir):
             time.sleep(1)
         return
 
-    os.makedirs(mad_base_dir, exist_ok=True)
-
     # create a lock file to prevent multiple downloads
     os.system(f'touch {mad_base_dir}/.lock')
 
     print("Downloading MyoArmbandDataset")
-    os.system(f'git clone https://github.com/UlysseCoteAllard/MyoArmbandDataset {mad_base_dir}')
+    cmd = f'git clone https://github.com/UlysseCoteAllard/MyoArmbandDataset {mad_base_dir}'
+    subprocess.call(cmd, shell=True)
     print("Download finished")
 
     # remove the lock file
     os.system(f'rm {mad_base_dir}/.lock')
 
 
-def get_mad_windows_dataset(mad_base_dir, _, window_length, overlap):
+def get_mad_windows_dataset(mad_base_dir, _, window_length, overlap, use_onehot_labels=False):
     maybe_download_mad_dataset(mad_base_dir)
 
     train_path = mad_base_dir + 'PreTrainingDataset/'
     eval_path = mad_base_dir + 'EvaluationDataset/'
 
-    eval_raw_dataset_dict = get_raw_mad_dataset(eval_path, window_length, overlap)
     train_raw_dataset_dict = get_raw_mad_dataset(train_path, window_length, overlap)
+    eval_raw_dataset_dict = get_raw_mad_dataset(eval_path, window_length, overlap)
 
     mad_all_windows = (
             eval_raw_dataset_dict['training0']['examples'] +
@@ -277,9 +283,11 @@ def get_mad_windows_dataset(mad_base_dir, _, window_length, overlap):
             mad_windows = np.concatenate((mad_windows, mad_subject_windows))
             mad_labels = np.concatenate((mad_labels, subject_labels))
 
-    mad_onehot_labels = np.array([labels_to_onehot(label) for label in mad_labels])
+    if use_onehot_labels:
+        # FIXME make this a parameter in config file
+        mad_labels = np.array([labels_to_onehot(label) for label in mad_labels])
     print("MAD dataset loaded")
-    return mad_windows, mad_onehot_labels
+    return mad_windows, mad_labels
 
 
 def create_ninapro_windows(X, y, stride, window_length, desired_labels=None):
@@ -398,7 +406,8 @@ class EMGWindowsDataset(data.Dataset):
             self.labels = self.labels[:10]
 
         self.windows = torch.tensor(self.windows, dtype=torch.float32)
-        self.labels = torch.tensor(self.labels, dtype=torch.float32)
+        # self.labels = torch.tensor(self.labels, dtype=torch.float32) # FIXME
+        self.labels = torch.tensor(self.labels, dtype=torch.long)
 
     def __len__(self):
         return len(self.windows)
@@ -410,7 +419,13 @@ class EMGWindowsDataset(data.Dataset):
 
     @property
     def num_unique_labels(self):
-        return self.labels.shape[1]
+        if len(self.labels.shape) < 2:
+            print("unique labels", self.labels.unique().shape[0])
+            return self.labels.unique().shape[0]
+        elif len(self.labels.shape) == 2:
+            return self.labels.shape[1]
+        else:
+            raise RuntimeError
 
 
 class NinaPro1(data.Dataset[data.TensorDataset]):
@@ -529,3 +544,43 @@ def maybe_download_drive_folder(destination_folder, file_ids):
     assert len(filenames) == len(file_ids), 'Not all files exist {filenames}'
 
     return sorted(filenames)
+
+def extract_writing_windows(writing_sample, window_size, overlap):
+    stride = window_size - overlap
+    n_windows = ((len(writing_sample) - window_size) // stride) + 1
+    windows = []
+    labels = []
+    for win_idx in range(n_windows):
+        s_idx = win_idx * stride
+        e_idx = s_idx + window_size
+        window = np.stack([game_state.emg for game_state in writing_sample[s_idx:e_idx]])
+        pen_pos = np.stack([game_state.pen for game_state in writing_sample[s_idx:e_idx]])
+        diff_x = np.diff(pen_pos[:,0]).sum()
+        diff_y = np.diff(pen_pos[:,1]).sum()
+        if np.abs(diff_x) > np.abs(diff_y):
+            label = 3 if diff_x > 0 else 1
+        else:
+            label = 4 if diff_y > 0 else 2
+
+        windows.append(window)
+        labels.append(label)
+
+    return np.stack(windows), np.stack(labels)
+
+def load_emg_writing_data(emg_draw_data_dir, window_size, overlap):
+    windows_list = []
+    labels_list = []
+    for emg_data_file in emg_draw_data_dir.glob('*.pkl'):
+        with open(emg_data_file, 'rb') as f:
+            data = pickle.load(f)
+
+            for move_data in data.values():
+                for writing_sample in move_data:
+                    if len(writing_sample) > window_size:
+                        sample_windows, sample_labels = extract_writing_windows(writing_sample, window_size, overlap)
+                        windows_list.append(sample_windows)
+                        labels_list.append(sample_labels)
+
+    windows = np.concatenate(windows_list, axis=0)
+    labels = np.concatenate(labels_list, axis=0)
+    return torch.tensor(windows, dtype=torch.float32), torch.tensor(labels, dtype=torch.long)
