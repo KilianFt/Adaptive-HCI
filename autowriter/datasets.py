@@ -124,8 +124,8 @@ def encode_moves(moves_data, move_map):
 
 
 def get_omniglot_moves(omniglot_dir: Path, canvas_size: int = 30, max_initial_value: int = 120, char_idxs=None):
-    img_dir = omniglot_dir / 'python' / 'images_background' / 'Latin'
-    stroke_dir = omniglot_dir / 'python' / 'strokes_background' / 'Latin'
+    img_dir = omniglot_dir / 'images' / 'images_background' / 'Latin'
+    stroke_dir = omniglot_dir / 'traces' / 'strokes_background' / 'Latin'
     raw_dataset = get_raw_omniglot_dataset(stroke_dir, img_dir, char_idxs=char_idxs)
     moves_data = omniglot_dataset_to_moves(raw_dataset, canvas_size=canvas_size,
                                            max_initial_value=max_initial_value)
@@ -160,6 +160,7 @@ class OmniglotGridDataset(Dataset):
     def __init__(self, omniglot_dir, context_len=200, pad_token=5, canvas_size=50,
                  max_initial_value=120, eos_token=4, char_idxs=[12, 15]):
         omniglot_dir = Path(omniglot_dir)
+        # TODO add automatic download after merge
         omniglot_data = get_omniglot_moves(
             omniglot_dir,
             canvas_size=canvas_size,
