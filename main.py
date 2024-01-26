@@ -10,21 +10,16 @@ import lightning as L
 
 import configs
 import train_general_model
+import train_autowriter
 import finetune_user_model
 import continuously_train_user_model
 from deployment.buddy import buddy_setup
+from interface.game import GameState # needed to load data for finetuning
 
 train_users = [
     hashlib.sha256("Kilian".encode("utf-8")).hexdigest()[:15],
     # hashlib.sha256("Manuel".encode("utf-8")).hexdigest()[:15],
 ]
-
-
-# FIXME remove this when interface is merged
-@dataclasses.dataclass
-class GameState:
-    pen: tuple[int, int]
-    emg: np.ndarray
 
 
 def get_user_results(user_metrics):
@@ -55,11 +50,14 @@ def main():
 
     logger, experiment_config = buddy_setup(experiment_config, entity=entity)
 
+    # TODO save general model after training once
     general_model = train_general_model.main(logger, experiment_config)
+    auto_writer = train_autowriter.main(experiment_config.auto_writer)
     population_metrics = collections.defaultdict(list)
 
     for user_hash in train_users:
         initial_model = copy.deepcopy(general_model)
+        # TODO check for user data, if persent finetune
         finetuned_user_model = finetune_user_model.main(initial_model, user_hash, experiment_config)
         return
 

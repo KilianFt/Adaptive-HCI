@@ -73,7 +73,7 @@ class ViTConfig(BaseModel):
 
 class AutoWriterConfig(BaseModel):
     omniglot_dir: str = "./datasets/omniglot"
-    model_type: str = 'gpt-mini'
+    gpt_type: str = 'gpt-mini'
     lr: float = 5e-4
     max_iters: int = 10_000
     batch_size: int = 32
@@ -97,6 +97,7 @@ class BaseConfig(BaseModel):
     pretrain: PretrainConfig = Field(default_factory=PretrainConfig)
     finetune: FinetuneConfig = Field(default_factory=FinetuneConfig)
     online: OnlineConfig = Field(default_factory=OnlineConfig)
+    auto_writer: AutoWriterConfig = Field(default_factory=AutoWriterConfig)
 
     hostname: str = "mila"
     # hostname: str = ""

@@ -1,3 +1,4 @@
+from pathlib import Path
 import torch
 
 from autowriter.mingpt.model import GPT
@@ -12,17 +13,21 @@ def batch_end_callback(trainer):
         print(f"iter_dt {trainer.iter_dt * 1000:.2f}ms; iter {trainer.iter_num}: train loss {trainer.loss.item():.5f}")
 
 
-def main():
-    config = AutoWriterConfig()
+def main(config):
     train_dataset = OmniglotGridDataset(config.omniglot_dir,
                                         context_len=config.context_len,
                                         char_idxs=config.character_idxs)
 
     model_config = GPT.get_default_config()
-    model_config.model_type = config.model_type
+    model_config.model_type = config.gpt_type
     model_config.vocab_size = train_dataset.get_vocab_size()
     model_config.block_size = train_dataset.get_block_size()
     model = GPT(model_config)
+
+    model_file = Path('models/draw_gpt_state_dict_o_l.pt')
+    if model_file.exists():
+        print('Loading existing writing model')
+        return model.load_state_dict(model_file)
 
     train_config = Trainer.get_default_config()
     train_config.learning_rate = config.lr
@@ -33,8 +38,9 @@ def main():
     trainer.set_callback('on_batch_end', batch_end_callback)
     trainer.run()
 
-    torch.save(model.state_dict(), 'models/draw_gpt_state_dict_o_l.pt')
+    torch.save(model.state_dict(), model_file)
 
 
 if __name__ == '__main__':
-    main()
+    config = AutoWriterConfig()
+    main(config)
