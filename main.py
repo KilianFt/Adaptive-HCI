@@ -50,7 +50,6 @@ def main():
 
     logger, experiment_config = buddy_setup(experiment_config, entity=entity)
 
-    # TODO save general model after training once
     general_model = train_general_model.main(logger, experiment_config)
     auto_writer = train_autowriter.main(experiment_config.auto_writer)
     population_metrics = collections.defaultdict(list)

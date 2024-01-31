@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import torch
 import lightning.pytorch as pl
 from lightning.pytorch.loggers import WandbLogger
@@ -13,6 +15,9 @@ def main(logger, experiment_config: configs.BaseConfig) -> LightningModule:
     pl_logger = WandbLogger()
 
     train_dataloader, val_dataloader, n_labels = get_dataloaders(experiment_config)
+
+    general_model_filename = Path('models') / 'general_emg_vit_state_dict.pt'
+    general_model_filename.parent.mkdir(exist_ok=True)
 
     vit = EMGViT(
         image_size=experiment_config.window_size,
@@ -38,7 +43,9 @@ def main(logger, experiment_config: configs.BaseConfig) -> LightningModule:
         metric_prefix='pretrain/',
         criterion_key=experiment_config.criterion_key,
     )
-    if not experiment_config.pretrain.do_pretraining:
+    if not experiment_config.pretrain.do_pretraining or general_model_filename.exists():
+        vit_state_dict = torch.load(general_model_filename)
+        pl_model.model.load_state_dict(vit_state_dict)
         return pl_model
 
     callbacks = utils.get_trainer_callbacks(experiment_config.pretrain)
@@ -52,6 +59,8 @@ def main(logger, experiment_config: configs.BaseConfig) -> LightningModule:
                          callbacks=callbacks)
 
     trainer.fit(model=pl_model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
+
+    torch.save(pl_model.model.state_dict(), general_model_filename)
 
     return pl_model
 

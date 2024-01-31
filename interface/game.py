@@ -48,6 +48,7 @@ class GameState:
     pen: tuple[int, int]
     emg: np.ndarray
     label: Optional[np.ndarray] = None
+    reward: Optional[torch.Tensor] = None
 
 
 emg_queue = multiprocessing.Queue()
@@ -55,7 +56,10 @@ emg_queue = multiprocessing.Queue()
 
 def get_emg():
     if not emg_queue.empty():
-        return emg_queue.get()
+        emg_range = (-128, 127)
+        raw_emg = emg_queue.get()
+        norm_emg = np.interp(raw_emg, emg_range, (-1, +1))
+        return norm_emg
     else:
         return np.zeros(8)  # Return zero array if no data is available
 
@@ -68,7 +72,7 @@ def load_models(emg_decoder_state_dict_file, auto_writer_state_dict_file, config
     emg_decoder = EMGViT(
         image_size=config.window_size,
         patch_size=config.general_model_config.patch_size,
-        num_classes=config.num_classes,#n_labels,
+        num_classes=config.num_classes,
         dim=config.general_model_config.dim,
         depth=config.general_model_config.depth,
         heads=config.general_model_config.heads,
@@ -113,16 +117,18 @@ class Interface(PyQt5.QtWidgets.QWidget):
         self.label_history = deque(maxlen=config.auto_writer.context_len)
         self.emg_buffer = deque(maxlen=config.window_size)
         self.n_new_samples = -config.overlap
+        self.beta = 1. # FIXME make param
+        self.is_first_sample = True
 
         self.predict_mode = True
         if self.predict_mode:
             auto_writer_state_dict_file = './models/draw_gpt_state_dict_o_l.pt'
-            emg_decoder_state_dict_file = './models/finetuned_emg_decoder_state_dict.pt'
+            emg_decoder_state_dict_file = './models/finetuned_state_dict_v12.pt'
             self.emg_decoder, self.auto_writer = load_models(emg_decoder_state_dict_file,
                                                              auto_writer_state_dict_file,
                                                              config)
-            self.emg_pos = np.array([WIDTH/2, HEIGHT/2])
-            self.step_size = 10 # px
+        self.emg_pos = torch.tensor([WIDTH/2, HEIGHT/2], dtype=torch.float32)
+        self.step_size = 20 # px
         now = datetime.now()
         dt_string = now.strftime("%Y_%m_%d_%H_%M_%S")
         self.out_folder = f"./datasets/emg_writing/{dt_string}/"
@@ -133,39 +139,46 @@ class Interface(PyQt5.QtWidgets.QWidget):
         label_tensor = torch.tensor(self.label_history, dtype=torch.long).unsqueeze(0)
         with torch.no_grad():
             emg_pred_raw = self.emg_decoder(emg_tensor)
-            emg_pred = F.sigmoid(emg_pred_raw)
+            emg_pred = F.softmax(emg_pred_raw[0,1:], dim=-1)
             auto_pred_raw, _ = self.auto_writer(label_tensor)
-            auto_pred = F.sigmoid(auto_pred_raw)
 
-        emg_next_token_probs = emg_pred[0,:4]
+        # EMG decoder is [Rest, move1, move2, ...]
+        # Auto writer is [move1, move2, ..., pad_token, eof_token]
+        emg_next_token_probs = emg_pred#[0,1:]
         if len(self.label_history) > 0:
-            auto_next_token_probs = auto_pred[0,-1,:4]
+            auto_pred = F.softmax(auto_pred_raw[0,-1,:], dim=-1)
+            auto_next_token_probs = auto_pred[:4]
         else:
-            auto_next_token_probs = torch.tensor([0.25, 0.25, 0.25, 0.25])
-        print(emg_next_token_probs)
-        print(auto_next_token_probs)
-        label = ((emg_next_token_probs + auto_next_token_probs) / 2).argmax().item()
-        print(label)
+            auto_next_token_probs = torch.ones_like(emg_next_token_probs)
+            auto_next_token_probs /= auto_next_token_probs.sum()
+        label = (emg_next_token_probs + self.beta * auto_next_token_probs).argmax().item()
         self.label_history.append(label)
-        move = np.array(label_to_move(label)) * self.step_size
-        print(move)
+        move = torch.tensor(label_to_move(label), dtype=torch.float32) * self.step_size
         self.emg_pos += move
-        print(self.emg_pos)
-        return int(self.emg_pos[0]), int(self.emg_pos[1])
+        return self.emg_pos
 
     def _transition(self, pen_x, pen_y, pen_is_down):
         emg = get_emg()
         self.emg_buffer.append(emg)
         self.n_new_samples += 1
         label = None
+        reward = None
         if pen_is_down:
+            if self.is_first_sample:
+                self.emg_pos = torch.tensor([pen_x, pen_y], dtype=torch.float32)
+                self.is_first_sample = False
+
             if self.predict_mode and self.n_new_samples > 50:
-                emg_x, emg_y = self._predict_emg()
+                emg_pos = self._predict_emg()
+                emg_x, emg_y = int(emg_pos[0]), int(emg_pos[1])
                 self.canvas[emg_y - emg_size:emg_y + emg_size, emg_x - emg_size:emg_x + emg_size] = 0
                 self.n_new_samples = 0
+                # calculate reward as min dist between desired path and current prediction
+                reward = -torch.cdist(self.char_path, emg_pos.unsqueeze(0)).min()
 
             self.canvas[pen_y - size:pen_y + size, pen_x - size:pen_x + size] = 100
-        new_state = GameState(pen=(pen_x, pen_y), emg=emg, label=label)
+            
+        new_state = GameState(pen=(pen_x, pen_y), emg=emg, label=label, reward=reward)
         return new_state
 
     def init_ui(self):
@@ -214,12 +227,18 @@ class Interface(PyQt5.QtWidgets.QWidget):
         normalized_char_strokes = self._sample_stroke(current_task)
 
         self.canvas.fill(255)
+        self.char_path = []
         for stroke in normalized_char_strokes:
             for x, y in stroke:
                 x = x + X_OFFSET
+                self.char_path.append([x,y])
                 self.canvas[y:y + SUGGESTION_WIDTH, x:x + SUGGESTION_WIDTH] = 0
+        self.char_path = torch.tensor(self.char_path, dtype=torch.float32)
 
-        return GameState(pen=(0, 0), emg=np.array([])), current_task
+        self.emg_pos = torch.tensor([WIDTH/2, HEIGHT/2], dtype=torch.float32)
+        self.is_first_sample = True
+
+        return GameState(pen=(0, 0), emg=torch.tensor([])), current_task
 
     def _sample_stroke(self, current_task):
         char_strokes = self.dataloader_iter[current_task]
