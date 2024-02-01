@@ -86,7 +86,7 @@ class BaseConfig(BaseModel):
     seed: int = 1000
     data_source: DataSourceEnum = DataSourceEnum.MAD
     window_size: int = 200
-    overlap: int = 150
+    overlap: int = 0
     num_classes: int = 5
     random_seed: int = 100
     save_checkpoints: bool = False

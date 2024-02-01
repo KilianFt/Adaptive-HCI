@@ -17,7 +17,7 @@ class EMGViT(ViT):
         super().__init__(*args, **kwargs)
 
     def __call__(self, x: torch.Tensor):
-        x.unsqueeze_(axis=1)
+        x = x.unsqueeze(axis=1)
         return self.forward(x)
 
 

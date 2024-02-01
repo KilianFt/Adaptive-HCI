@@ -56,18 +56,16 @@ emg_queue = multiprocessing.Queue()
 
 def get_emg():
     if not emg_queue.empty():
-        emg_range = (-128, 127)
-        raw_emg = emg_queue.get()
-        norm_emg = np.interp(raw_emg, emg_range, (-1, +1))
-        return norm_emg
+        return emg_queue.get()
     else:
-        return np.zeros(8)  # Return zero array if no data is available
+        return None#np.zeros(8)  # Return zero array if no data is available
 
 
 size = 3
 emg_size = 5
 
-def load_models(emg_decoder_state_dict_file, auto_writer_state_dict_file, config):
+
+def load_emg_decoder(emg_decoder_state_dict_file, config):
     emg_decoder_state_dict = torch.load(emg_decoder_state_dict_file)
     emg_decoder = EMGViT(
         image_size=config.window_size,
@@ -83,6 +81,11 @@ def load_models(emg_decoder_state_dict_file, auto_writer_state_dict_file, config
     )
     emg_decoder.load_state_dict(emg_decoder_state_dict)
     emg_decoder.eval()
+    return emg_decoder
+
+
+def load_models(emg_decoder_state_dict_file, auto_writer_state_dict_file, config):
+    emg_decoder = load_emg_decoder(emg_decoder_state_dict_file, config)
 
     train_dataset = OmniglotGridDataset((config.auto_writer.omniglot_dir),
                                         context_len=config.auto_writer.context_len,
@@ -120,7 +123,7 @@ class Interface(PyQt5.QtWidgets.QWidget):
         self.beta = 1. # FIXME make param
         self.is_first_sample = True
 
-        self.predict_mode = True
+        self.predict_mode = False
         if self.predict_mode:
             auto_writer_state_dict_file = './models/draw_gpt_state_dict_o_l.pt'
             emg_decoder_state_dict_file = './models/finetuned_state_dict_v12.pt'
@@ -158,7 +161,9 @@ class Interface(PyQt5.QtWidgets.QWidget):
         return self.emg_pos
 
     def _transition(self, pen_x, pen_y, pen_is_down):
-        emg = get_emg()
+        emg = None
+        while emg is None:
+            emg = get_emg()
         self.emg_buffer.append(emg)
         self.n_new_samples += 1
         label = None
@@ -177,7 +182,7 @@ class Interface(PyQt5.QtWidgets.QWidget):
                 reward = -torch.cdist(self.char_path, emg_pos.unsqueeze(0)).min()
 
             self.canvas[pen_y - size:pen_y + size, pen_x - size:pen_x + size] = 100
-            
+
         new_state = GameState(pen=(pen_x, pen_y), emg=emg, label=label, reward=reward)
         return new_state
 

@@ -1,5 +1,5 @@
 import pathlib
-
+import torch
 import lightning.pytorch as pl
 from lightning.pytorch import LightningModule
 from lightning.pytorch.loggers import WandbLogger
@@ -14,14 +14,16 @@ from adaptive_hci import utils
 def load_finetune_dataloader(config):
     file_path = pathlib.Path(__file__).resolve()
 
-    # FIXME make sure download this works in sweep
-    emg_draw_data_dir = file_path.parent / 'datasets' / 'emg_writing_o_l/'
-    emg_writing_ids_file = file_path.parent / 'emg_writing_file_names.txt'
-    with open(emg_writing_ids_file, 'rb') as f:
-        file_ids = f.readlines()
-    file_ids = [file_id.decode().strip() for file_id in file_ids]
-    maybe_download_drive_folder(emg_draw_data_dir, file_ids)
+    emg_draw_data_dir = file_path.parent / 'datasets' / 'emg_writing' / 'emg_writing_preprocessed'
 
+    # download files in way that also works in sweep
+    # emg_writing_ids_file = file_path.parent / 'emg_writing_file_names.txt'
+    # with open(emg_writing_ids_file, 'rb') as f:
+    #     file_ids = f.readlines()
+    # file_ids = [file_id.decode().strip() for file_id in file_ids]
+    # maybe_download_drive_folder(emg_draw_data_dir, file_ids)
+
+    # TODO normalize data, raw is in range [-128, 127] and preprocessed >0 (not sure about the max value)
     observations, actions = load_emg_writing_data(emg_draw_data_dir, window_size=config.window_size, overlap=config.overlap)
 
     train_observations, val_observations, train_optimal_actions, val_optimal_actions = train_test_split(observations, actions, test_size=0.25)
@@ -56,5 +58,7 @@ def main(model: LightningModule, user_hash, config: configs.BaseConfig) -> Light
                          gradient_clip_val=config.gradient_clip_val)
 
     trainer.fit(model=model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
+
+    torch.save(model.model.state_dict(), 'models/finetuned_state_dict.pt')
 
     return model
