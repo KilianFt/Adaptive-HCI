@@ -28,7 +28,7 @@ from autowriter.mingpt.model import GPT
 from configs import BaseConfig
 
 # Constants
-WIDTH, HEIGHT = 500, 500
+WIDTH, HEIGHT = 600, 600
 ALLOWED_TASKS = [ord(c) - ord('a') for c in 'lo']
 SUGGESTION_WIDTH = 5
 X_OFFSET = 30 # to make sure that there is space between stroke prompt and border
@@ -113,17 +113,15 @@ class Interface(PyQt5.QtWidgets.QWidget):
         self.dataloader_iter = data_loaders.task_datasets.get_omniglot_dataset()
         self.traces = {i: [[], ] for i in ALLOWED_TASKS}
 
-        game_state, new_task = self.reset()
-        self.current_task = new_task
-        self.game_state = game_state
         self.trace_count = 0
         self.label_history = deque(maxlen=config.auto_writer.context_len)
         self.emg_buffer = deque(maxlen=config.window_size)
         self.n_new_samples = -config.overlap
-        self.beta = 1. # FIXME make param
+        self.stide = config.window_size - config.overlap
+        self.beta = 10. # FIXME make param
         self.is_first_sample = True
 
-        self.predict_mode = False
+        self.predict_mode = True
         if self.predict_mode:
             auto_writer_state_dict_file = './models/draw_gpt_state_dict_o_l.pt'
             emg_decoder_state_dict_file = './models/finetuned_state_dict_v12.pt'
@@ -137,28 +135,33 @@ class Interface(PyQt5.QtWidgets.QWidget):
         self.out_folder = f"./datasets/emg_writing/{dt_string}/"
         os.makedirs(self.out_folder)
 
+        game_state, new_task = self.reset()
+        self.current_task = new_task
+        self.game_state = game_state
+
+
     def _predict_emg(self):
         emg_tensor = torch.tensor(self.emg_buffer, dtype=torch.float32).unsqueeze(0)
         label_tensor = torch.tensor(self.label_history, dtype=torch.long).unsqueeze(0)
-        with torch.no_grad():
-            emg_pred_raw = self.emg_decoder(emg_tensor)
-            emg_pred = F.softmax(emg_pred_raw[0,1:], dim=-1)
-            auto_pred_raw, _ = self.auto_writer(label_tensor)
 
         # EMG decoder is [Rest, move1, move2, ...]
-        # Auto writer is [move1, move2, ..., pad_token, eof_token]
-        emg_next_token_probs = emg_pred#[0,1:]
-        if len(self.label_history) > 0:
-            auto_pred = F.softmax(auto_pred_raw[0,-1,:], dim=-1)
-            auto_next_token_probs = auto_pred[:4]
-        else:
+        with torch.no_grad():
+            emg_pred = self.emg_decoder(emg_tensor)
+        emg_next_token_probs = F.softmax(emg_pred[0,1:], dim=-1)
+        
+        if len(self.label_history) < 1:
             auto_next_token_probs = torch.ones_like(emg_next_token_probs)
             auto_next_token_probs /= auto_next_token_probs.sum()
+        else:
+            auto_next_token, auto_probs = self.auto_writer.generate(label_tensor, 1, do_sample=True, return_probs=True)
+            # Auto writer is [move1, move2, ..., pad_token, eof_token]
+            auto_next_token_probs = auto_probs[-1, :4]
+
         label = (emg_next_token_probs + self.beta * auto_next_token_probs).argmax().item()
         self.label_history.append(label)
-        move = torch.tensor(label_to_move(label), dtype=torch.float32) * self.step_size
+        # switch move order to match the interface
+        move = torch.tensor(label_to_move(label)[::-1], dtype=torch.float32) * self.step_size
         self.emg_pos += move
-        return self.emg_pos
 
     def _transition(self, pen_x, pen_y, pen_is_down):
         emg = None
@@ -166,6 +169,7 @@ class Interface(PyQt5.QtWidgets.QWidget):
             emg = get_emg()
         self.emg_buffer.append(emg)
         self.n_new_samples += 1
+
         label = None
         reward = None
         if pen_is_down:
@@ -173,14 +177,14 @@ class Interface(PyQt5.QtWidgets.QWidget):
                 self.emg_pos = torch.tensor([pen_x, pen_y], dtype=torch.float32)
                 self.is_first_sample = False
 
-            if self.predict_mode and self.n_new_samples > 50:
-                emg_pos = self._predict_emg()
-                emg_x, emg_y = int(emg_pos[0]), int(emg_pos[1])
+            if self.predict_mode and self.n_new_samples > 1:#self.stide:
+                self._predict_emg()
+                emg_x, emg_y = int(self.emg_pos[0]), int(self.emg_pos[1])
                 self.canvas[emg_y - emg_size:emg_y + emg_size, emg_x - emg_size:emg_x + emg_size] = 0
                 self.n_new_samples = 0
                 # calculate reward as min dist between desired path and current prediction
-                reward = -torch.cdist(self.char_path, emg_pos.unsqueeze(0)).min()
-
+                reward = -torch.cdist(self.char_path, self.emg_pos.unsqueeze(0)).min()
+                print(reward)
             self.canvas[pen_y - size:pen_y + size, pen_x - size:pen_x + size] = 100
 
         new_state = GameState(pen=(pen_x, pen_y), emg=emg, label=label, reward=reward)
@@ -242,6 +246,8 @@ class Interface(PyQt5.QtWidgets.QWidget):
 
         self.emg_pos = torch.tensor([WIDTH/2, HEIGHT/2], dtype=torch.float32)
         self.is_first_sample = True
+
+        self.label_history.clear()
 
         return GameState(pen=(0, 0), emg=torch.tensor([])), current_task
 

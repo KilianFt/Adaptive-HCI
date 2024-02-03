@@ -14,6 +14,7 @@ def batch_end_callback(trainer):
 
 
 def main(config):
+    # TODO shuffle starting positions
     train_dataset = OmniglotGridDataset(config.omniglot_dir,
                                         context_len=config.context_len,
                                         char_idxs=config.character_idxs)
