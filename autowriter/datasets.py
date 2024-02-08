@@ -123,6 +123,19 @@ def encode_moves(moves_data, move_map):
     return encoded_moves_data    
 
 
+def switch_directions(traces):
+    # replace 0 with 2 and 2 with 0 and 1 with 3 and 3 with 1
+    switched_traces = []
+    for trace in traces:
+        switched_trace = trace.clone()
+        switched_trace[trace == 0] = 2
+        switched_trace[trace == 2] = 0
+        switched_trace[trace == 1] = 3
+        switched_trace[trace == 3] = 1
+        switched_traces.append(switched_trace)
+    return switched_traces
+
+
 def get_omniglot_moves(omniglot_dir: Path, canvas_size: int = 30, max_initial_value: int = 120, char_idxs=None):
     img_dir = omniglot_dir / 'images' / 'images_background' / 'Latin'
     stroke_dir = omniglot_dir / 'traces' / 'strokes_background' / 'Latin'
@@ -158,15 +171,21 @@ def pad_data(data, pad_token, context_len):
 
 class OmniglotGridDataset(Dataset):
     def __init__(self, omniglot_dir, context_len=200, pad_token=5, canvas_size=50,
-                 max_initial_value=120, eos_token=4, char_idxs=[12, 15]):
+                 max_initial_value=120, eos_token=4, char_idxs=[12, 15], include_switched=True):
         omniglot_dir = Path(omniglot_dir)
         # TODO add automatic download after merge
-        omniglot_data = get_omniglot_moves(
+        normal_omniglot_data = get_omniglot_moves(
             omniglot_dir,
             canvas_size=canvas_size,
             max_initial_value=max_initial_value,
             char_idxs=char_idxs,
         )
+
+        if include_switched:
+            switched_omniglot_data = switch_directions(normal_omniglot_data)
+            omniglot_data = normal_omniglot_data + switched_omniglot_data
+        else:
+            omniglot_data = normal_omniglot_data
 
         data_w_stop = [
             torch.cat((x, torch.tensor([eos_token]))).type(torch.long) for x in omniglot_data
