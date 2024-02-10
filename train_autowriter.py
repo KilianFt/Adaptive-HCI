@@ -1,7 +1,7 @@
 from pathlib import Path
 import torch
 import wandb
-import lightning as L
+# import lightning as L
 
 from autowriter.mingpt.model import GPT
 from autowriter.mingpt.trainer import Trainer
@@ -54,7 +54,8 @@ def main(config):
 
 if __name__ == '__main__':
     experiment_config = BaseConfig()
-    L.seed_everything(experiment_config.seed)
+    # L.seed_everything(experiment_config.seed)
+    torch.manual_seed(experiment_config.seed)
 
     entity = "kilian"
 
