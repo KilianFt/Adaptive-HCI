@@ -1,7 +1,7 @@
 from pathlib import Path
 import torch
 import wandb
-import lightning as L
+# import lightning as L
 
 from autowriter.mingpt.model import GPT
 from autowriter.mingpt.trainer import Trainer
@@ -41,6 +41,7 @@ def main(config):
 
     train_config = Trainer.get_default_config()
     train_config.learning_rate = config.lr
+    train_config.device = 'cuda'
     train_config.max_iters = config.max_iters
     train_config.batch_size = config.batch_size
 
@@ -54,7 +55,8 @@ def main(config):
 
 if __name__ == '__main__':
     experiment_config = BaseConfig()
-    L.seed_everything(experiment_config.seed)
+    # L.seed_everything(experiment_config.seed)
+    torch.manual_seed(experiment_config.seed)
 
     entity = "kilian"
 

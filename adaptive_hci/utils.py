@@ -9,6 +9,7 @@ from lightning.pytorch.callbacks import StochasticWeightAveraging
 
 
 def get_accelerator(config_type='base'):
+    return 'mps' # FIXME
     accelerator = 'cuda'
     if config_type == 'smoke':
         accelerator = 'cpu'
