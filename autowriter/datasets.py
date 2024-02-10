@@ -1,3 +1,6 @@
+import os
+import requests
+import zipfile
 from collections import defaultdict
 from pathlib import Path
 from typing import List
@@ -6,6 +9,18 @@ import torch
 from torch.utils.data import Dataset
 import numpy as np
 import matplotlib.pyplot as plt
+
+
+def maybe_download(file_name: str, path: str):
+    if not os.path.exists(path):
+        os.makedirs(path, exist_ok=True)
+        strokes_url = f"https://raw.githubusercontent.com/brendenlake/omniglot/master/python/{file_name}_background.zip"
+        r = requests.get(strokes_url)
+        tmp_file = os.path.join(path, f"{file_name}.zip")
+        with open(tmp_file, 'wb') as f:
+            f.write(r.content)
+        with zipfile.ZipFile(tmp_file, 'r') as zip_ref:
+            zip_ref.extractall(path)
 
 
 def load_img(fn):
@@ -179,6 +194,11 @@ class OmniglotGridDataset(Dataset):
                  max_initial_value=120, eos_token=4, char_idxs=[12, 15], include_switched=True):
         omniglot_dir = Path(omniglot_dir)
         # TODO add automatic download
+        img_path = omniglot_dir / 'images'
+        traces_path = omniglot_dir / 'traces'
+        maybe_download("images", img_path.as_posix())
+        maybe_download("strokes", traces_path.as_posix())
+
         normal_omniglot_data = get_omniglot_moves(
             omniglot_dir,
             canvas_sizes=canvas_sizes,

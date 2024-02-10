@@ -1,0 +1,31 @@
+program: train_autowriter.py
+command:
+  - ${env}
+  - ${interpreter}
+  - -O
+  - ${program}
+  - ${args}
+metric:
+  name: train_loss
+  goal: minimize
+method: bayes
+parameters:
+  auto_writer:
+    parameters:
+      lr: 
+        distribution: log_uniform_values
+        min: 0.00001
+        max: 0.0005
+      max_iters:
+        values: [ 15_000, 20_000, 25_000 ]
+      batch_size:
+        values: [ 32, 64, 128, 256 ]
+      context_len:
+        values: [100, 150, 200]
+      n_layer:
+        min: 6
+        max: 10
+      n_head:
+        values: [6, 8, 12, 16]
+      n_embd:
+        values: [64, 128, 192, 256]
