@@ -78,6 +78,7 @@ class AutoWriterConfig(BaseModel):
     max_iters: int = 10_000
     batch_size: int = 32
     context_len: int = 100
+    canvas_sizes: List[int] = [30, 40, 50, 60, 70]
     character_idxs: Optional[List[int]] = [12, 15] # None # e.g. [12, 15] for o and l
 
 

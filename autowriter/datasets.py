@@ -1,5 +1,6 @@
 from collections import defaultdict
 from pathlib import Path
+from typing import List
 
 import torch
 from torch.utils.data import Dataset
@@ -136,11 +137,15 @@ def switch_directions(traces):
     return switched_traces
 
 
-def get_omniglot_moves(omniglot_dir: Path, canvas_size: int = 30, max_initial_value: int = 120, char_idxs=None):
+def get_omniglot_moves(omniglot_dir: Path, canvas_sizes: List[int] = [20, 30, 40],
+                       max_initial_value: int = 120, char_idxs=None):
     img_dir = omniglot_dir / 'images' / 'images_background' / 'Latin'
     stroke_dir = omniglot_dir / 'traces' / 'strokes_background' / 'Latin'
     raw_dataset = get_raw_omniglot_dataset(stroke_dir, img_dir, char_idxs=char_idxs)
-    moves_data = omniglot_dataset_to_moves(raw_dataset, canvas_size=canvas_size,
+
+    moves_data = []
+    for canvas_size in canvas_sizes:
+        moves_data += omniglot_dataset_to_moves(raw_dataset, canvas_size=canvas_size,
                                            max_initial_value=max_initial_value)
 
     move_map = [[-1, 0],
@@ -170,13 +175,13 @@ def pad_data(data, pad_token, context_len):
     
 
 class OmniglotGridDataset(Dataset):
-    def __init__(self, omniglot_dir, context_len=200, pad_token=5, canvas_size=50,
+    def __init__(self, omniglot_dir, context_len=200, pad_token=5, canvas_sizes=[40, 50, 60],
                  max_initial_value=120, eos_token=4, char_idxs=[12, 15], include_switched=True):
         omniglot_dir = Path(omniglot_dir)
-        # TODO add automatic download after merge
+        # TODO add automatic download
         normal_omniglot_data = get_omniglot_moves(
             omniglot_dir,
-            canvas_size=canvas_size,
+            canvas_sizes=canvas_sizes,
             max_initial_value=max_initial_value,
             char_idxs=char_idxs,
         )

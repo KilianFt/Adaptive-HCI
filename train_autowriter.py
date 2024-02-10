@@ -17,7 +17,8 @@ def main(config):
     # TODO shuffle starting positions
     train_dataset = OmniglotGridDataset(config.omniglot_dir,
                                         context_len=config.context_len,
-                                        char_idxs=config.character_idxs)
+                                        char_idxs=config.character_idxs,
+                                        canvas_sizes=config.canvas_sizes,)
 
     model_config = GPT.get_default_config()
     model_config.model_type = config.gpt_type
@@ -25,10 +26,11 @@ def main(config):
     model_config.block_size = train_dataset.get_block_size()
     model = GPT(model_config)
 
-    model_file = Path('models/draw_gpt_state_dict_o_l.pt')
+    model_file = Path('models/draw_gpt_state_dict_o_l_v3.pt')
     if model_file.exists():
         print('Loading existing writing model')
-        return model.load_state_dict(model_file)
+        state_dict = torch.load(model_file)
+        return model.load_state_dict(state_dict)
 
     train_config = Trainer.get_default_config()
     train_config.learning_rate = config.lr
