@@ -35,7 +35,7 @@ class PretrainConfig(BaseModel):
 class FinetuneConfig(BaseModel):
     n_frozen_layers: int = 0
     num_episodes: Optional[int] = None
-    epochs: int = 100
+    epochs: int = 25#100
     lr: float = 0.00026
     batch_size: int = 128
     num_workers: int = 8
@@ -74,16 +74,16 @@ class ViTConfig(BaseModel):
 class AutoWriterConfig(BaseModel):
     omniglot_dir: str = "./datasets/omniglot"
     canvas_sizes: List[int] = [30, 40, 50, 60, 70]
-    character_idxs: Optional[List[int]] = None#[12, 15] # e.g. [12, 15] for o and l
+    character_idxs: Optional[List[int]] = [12, 15] # e.g. [12, 15] for o and l
 
     # gpt_type: str = 'gpt-mini'
     
-    lr: float = 5e-5
-    max_iters: int = 20_000
+    lr: float = 0.0003
+    max_iters: int = 5_000#25_000
     batch_size: int = 64
     context_len: int = 100
-    n_layer: int = 6
-    n_head: int = 6
+    n_layer: int = 10
+    n_head: int = 8
     n_embd: int = 192
 
 
@@ -92,7 +92,7 @@ class BaseConfig(BaseModel):
     seed: int = 1000
     data_source: DataSourceEnum = DataSourceEnum.MAD
     window_size: int = 200
-    overlap: int = 0
+    overlap: int = 180
     num_classes: int = 5
     random_seed: int = 100
     save_checkpoints: bool = False

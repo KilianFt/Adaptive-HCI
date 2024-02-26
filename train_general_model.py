@@ -44,6 +44,7 @@ def main(logger, experiment_config: configs.BaseConfig) -> LightningModule:
         criterion_key=experiment_config.criterion_key,
     )
     if not experiment_config.pretrain.do_pretraining or general_model_filename.exists():
+        print('Loading pretrained general model')
         vit_state_dict = torch.load(general_model_filename)
         pl_model.model.load_state_dict(vit_state_dict)
         return pl_model
