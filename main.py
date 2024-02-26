@@ -51,7 +51,7 @@ def main():
     logger, experiment_config = buddy_setup(experiment_config, entity=entity)
 
     general_model = train_general_model.main(logger, experiment_config)
-    auto_writer = train_autowriter.main(experiment_config.auto_writer)
+    # auto_writer = train_autowriter.main(experiment_config.auto_writer)
     population_metrics = collections.defaultdict(list)
 
     for user_hash in train_users:

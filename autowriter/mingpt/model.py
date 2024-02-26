@@ -281,7 +281,7 @@ class GPT(nn.Module):
         return logits, loss
 
     @torch.no_grad()
-    def generate(self, idx, max_new_tokens, temperature=1.0, do_sample=False, top_k=None, return_probs=False):
+    def generate(self, idx, max_new_tokens, temperature=1.0, do_sample=False, top_k=None, return_logits=False):
         """
         Take a conditioning sequence of indices idx (LongTensor of shape (b,t)) and complete
         the sequence max_new_tokens times, feeding the predictions back into the model each time.
@@ -311,7 +311,7 @@ class GPT(nn.Module):
             # append sampled index to the running sequence and continue
             idx = torch.cat((idx, idx_next), dim=1)
 
-        if return_probs:
-            return idx, pred_probs
+        if return_logits:
+            return idx, logits
 
         return idx
