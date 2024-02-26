@@ -142,6 +142,8 @@ def encode_moves(moves_data, move_map):
 def switch_directions(traces):
     # replace 0 with 2 and 2 with 0 and 1 with 3 and 3 with 1
     switched_traces = []
+
+    # rotate 180 degrees
     for trace in traces:
         switched_trace = trace.clone()
         switched_trace[trace == 0] = 2
@@ -149,6 +151,23 @@ def switch_directions(traces):
         switched_trace[trace == 1] = 3
         switched_trace[trace == 3] = 1
         switched_traces.append(switched_trace)
+    # rotate 90 degrees
+    for trace in traces:
+        switched_trace = trace.clone()
+        switched_trace[trace == 0] = 3
+        switched_trace[trace == 2] = 1
+        switched_trace[trace == 1] = 2
+        switched_trace[trace == 3] = 0
+        switched_traces.append(switched_trace)
+    # rotate 270 degrees
+    for trace in traces:
+        switched_trace = trace.clone()
+        switched_trace[trace == 0] = 1
+        switched_trace[trace == 2] = 3
+        switched_trace[trace == 1] = 2
+        switched_trace[trace == 3] = 0
+        switched_traces.append(switched_trace)
+    
     return switched_traces
 
 

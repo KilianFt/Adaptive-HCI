@@ -21,7 +21,7 @@ def load_finetune_dataloader(config):
     # with open(emg_writing_ids_file, 'rb') as f:
     #     file_ids = f.readlines()
     # file_ids = [file_id.decode().strip() for file_id in file_ids]
-    # maybe_download_drive_folder(emg_draw_data_dir, file_ids)
+    # maybe_download_drive_folder(emg_draw_dat a_dir, file_ids)
 
     # TODO normalize data, raw is in range [-128, 127] and preprocessed >0 (not sure about the max value)
     observations, actions = load_emg_writing_data(emg_draw_data_dir, window_size=config.window_size, overlap=config.overlap)
@@ -59,6 +59,6 @@ def main(model: LightningModule, user_hash, config: configs.BaseConfig) -> Light
 
     trainer.fit(model=model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 
-    torch.save(model.model.state_dict(), 'models/finetuned_state_dict.pt')
+    # torch.save(model.model.state_dict(), 'models/finetuned_state_dict_testing.pt')
 
     return model
