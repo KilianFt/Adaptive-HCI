@@ -92,7 +92,10 @@ def load_models(emg_decoder_state_dict_file, auto_writer_state_dict_file, config
                                         char_idxs=config.auto_writer.character_idxs)
 
     model_config = GPT.get_default_config()
-    model_config.model_type = config.auto_writer.gpt_type
+    # model_config.model_type = 'gpt-mini'
+    model_config.n_layer = config.n_layer
+    model_config.n_head = config.n_head
+    model_config.n_embd =  config.n_embd
     model_config.vocab_size = train_dataset.get_vocab_size()
     model_config.block_size = train_dataset.get_block_size()
     auto_writer = GPT(model_config)
@@ -118,13 +121,14 @@ class Interface(PyQt5.QtWidgets.QWidget):
         self.emg_buffer = deque(maxlen=config.window_size)
         self.n_new_samples = -config.overlap
         self.stide = config.window_size - config.overlap
-        self.beta = 10. # FIXME make param
+        self.beta = .9 # FIXME make param
         self.is_first_sample = True
+        self.do_sample = False
 
         self.predict_mode = True
         if self.predict_mode:
-            auto_writer_state_dict_file = './models/draw_gpt_state_dict_o_l.pt'
-            emg_decoder_state_dict_file = './models/finetuned_state_dict_v12.pt'
+            auto_writer_state_dict_file = './models/draw_gpt_state_dict_o_l_v3.pt'
+            emg_decoder_state_dict_file = './models/prepro_finetuned_state_dict.pt'
             self.emg_decoder, self.auto_writer = load_models(emg_decoder_state_dict_file,
                                                              auto_writer_state_dict_file,
                                                              config)
@@ -139,7 +143,6 @@ class Interface(PyQt5.QtWidgets.QWidget):
         self.current_task = new_task
         self.game_state = game_state
 
-
     def _predict_emg(self):
         emg_tensor = torch.tensor(self.emg_buffer, dtype=torch.float32).unsqueeze(0)
         label_tensor = torch.tensor(self.label_history, dtype=torch.long).unsqueeze(0)
@@ -148,16 +151,23 @@ class Interface(PyQt5.QtWidgets.QWidget):
         with torch.no_grad():
             emg_pred = self.emg_decoder(emg_tensor)
         emg_next_token_probs = F.softmax(emg_pred[0,1:], dim=-1)
+        # emg_next_token_probs = torch.ones(4) / 4
         
         if len(self.label_history) < 1:
             auto_next_token_probs = torch.ones_like(emg_next_token_probs)
             auto_next_token_probs /= auto_next_token_probs.sum()
         else:
-            auto_next_token, auto_probs = self.auto_writer.generate(label_tensor, 1, do_sample=True, return_probs=True)
+            auto_next_token, auto_probs = self.auto_writer.generate(label_tensor, 1, return_probs=True)
             # Auto writer is [move1, move2, ..., pad_token, eof_token]
             auto_next_token_probs = auto_probs[-1, :4]
 
-        label = (emg_next_token_probs + self.beta * auto_next_token_probs).argmax().item()
+        probabilities = (1 - self.beta) * emg_next_token_probs + self.beta * auto_next_token_probs
+        if self.do_sample:
+            idx_next = torch.multinomial(probabilities, num_samples=1)
+            label = idx_next.item()
+        else:
+            label = probabilities.argmax().item()
+
         self.label_history.append(label)
         # switch move order to match the interface
         move = torch.tensor(label_to_move(label)[::-1], dtype=torch.float32) * self.step_size
@@ -177,7 +187,7 @@ class Interface(PyQt5.QtWidgets.QWidget):
                 self.emg_pos = torch.tensor([pen_x, pen_y], dtype=torch.float32)
                 self.is_first_sample = False
 
-            if self.predict_mode and self.n_new_samples > 1:#self.stide:
+            if self.predict_mode and self.n_new_samples > self.stide:
                 self._predict_emg()
                 emg_x, emg_y = int(self.emg_pos[0]), int(self.emg_pos[1])
                 self.canvas[emg_y - emg_size:emg_y + emg_size, emg_x - emg_size:emg_x + emg_size] = 0
@@ -312,10 +322,17 @@ def main():
     myo_process = multiprocessing.Process(target=worker, args=(emg_queue,))
     myo_process.start()
 
-    app = QApplication(sys.argv)
-    interface = Interface()
-    interface.show()
-    app.exec()
+    try:
+        app = QApplication(sys.argv)
+        interface = Interface()
+        interface.show()
+        app.exec()
+    except KeyboardInterrupt:
+        print("Quitting")
+        app.quit()
+        myo_process.terminate()
+        myo_process.join()
+        quit()
 
 
 if __name__ == "__main__":
