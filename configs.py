@@ -78,13 +78,13 @@ class AutoWriterConfig(BaseModel):
 
     # gpt_type: str = 'gpt-mini'
     
-    lr: float = 0.0003
+    lr: float = 0.0002
     max_iters: int = 15_000
-    batch_size: int = 256
+    batch_size: int = 64
     context_len: int = 200
     n_layer: int = 12
     n_head: int = 8
-    n_embd: int = 192
+    n_embd: int = 256
 
 
 class BaseConfig(BaseModel):
