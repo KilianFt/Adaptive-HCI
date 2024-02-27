@@ -1,8 +1,8 @@
 from pathlib import Path
 import torch
 import wandb
-import lightning as L
 
+from adaptive_hci import utils
 from autowriter.mingpt.model import GPT
 from autowriter.mingpt.trainer import Trainer
 from autowriter.datasets import OmniglotGridDataset
@@ -33,7 +33,7 @@ def main(config):
     model_config.block_size = train_dataset.get_block_size()
     model = GPT(model_config)
 
-    # model_file = Path('models/draw_gpt_state_dict_all_v3.pt')
+    model_file = Path('models/draw_gpt_state_dict_l_o_v7.pt')
     # if model_file.exists():
     #     print('Loading existing writing model')
     #     state_dict = torch.load(model_file)
@@ -41,6 +41,7 @@ def main(config):
 
     train_config = Trainer.get_default_config()
     train_config.learning_rate = config.lr
+    train_config.device = utils.get_accelerator()
     train_config.max_iters = config.max_iters
     train_config.batch_size = config.batch_size
 
@@ -49,12 +50,12 @@ def main(config):
     trainer.set_callback('on_batch_end', batch_end_callback)
     trainer.run()
 
-    # torch.save(model.state_dict(), model_file)
+    torch.save(model.state_dict(), model_file)
 
 
 if __name__ == '__main__':
     experiment_config = BaseConfig()
-    L.seed_everything(experiment_config.seed)
+    torch.manual_seed(experiment_config.seed)
 
     entity = "kilian"
 

@@ -59,6 +59,6 @@ def main(model: LightningModule, user_hash, config: configs.BaseConfig) -> Light
 
     trainer.fit(model=model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 
-    torch.save(model.model.state_dict(), 'models/finetuned_state_dict.pt')
+    # torch.save(model.model.state_dict(), 'models/finetuned_state_dict_testing.pt')
 
     return model
