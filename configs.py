@@ -105,12 +105,12 @@ class BaseConfig(BaseModel):
     online: OnlineConfig = Field(default_factory=OnlineConfig)
     auto_writer: AutoWriterConfig = Field(default_factory=AutoWriterConfig)
 
-    # hostname: str = "mila"
-    hostname: str = ""
+    hostname: str = "mila"
+    # hostname: str = ""
     # hostname: str = "cc-cedar"
-    # sweep_config: str = "sweep.yaml"
+    sweep_config: str = "sweep.yaml"
     # sweep_config: str = "sweeps/autowriter.yaml"
-    sweep_config: str = ""
+    # sweep_config: str = ""
     proc_num: int = 1
 
     class Config:
@@ -123,7 +123,7 @@ class BaseConfig(BaseModel):
 
         super().__init__(**data)
         if self.sweep_config:
-            self.proc_num = 8
+            self.proc_num = 1
 
     def __str__(self):
         arg_str = pickle.dumps(self.dict())

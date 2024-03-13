@@ -74,6 +74,14 @@ class Trainer:
             num_workers=config.num_workers,
         )
 
+        self.val_loader = DataLoader(
+                self.val_dataset,
+                shuffle=False,
+                pin_memory=True,
+                batch_size=config.batch_size,
+                num_workers=config.num_workers,
+            )
+
         model.train()
         self.iter_num = 0
         self.iter_time = time.time()
@@ -107,3 +115,17 @@ class Trainer:
             # termination conditions
             if config.max_iters is not None and self.iter_num >= config.max_iters:
                 break
+
+    def validate(self):
+        self.model.eval()
+        with torch.no_grad():
+            val_loss = 0.0
+            for batch in self.val_loader:
+                batch = [t.to(self.device) for t in batch]
+                x, y = batch
+                _, loss = self.model(x, y)
+                val_loss += loss.item()
+            val_loss = val_loss / len(self.val_loader)
+        self.model.train()
+
+        return val_loss

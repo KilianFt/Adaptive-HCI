@@ -14,8 +14,15 @@ from configs import BaseConfig
 def batch_end_callback(trainer):
     if trainer.iter_num % 100 == 0:
         train_loss = trainer.loss.item()
-        print(f"iter_dt {trainer.iter_dt * 1000:.2f}ms; iter {trainer.iter_num}: train loss {train_loss:.5f}")
-        wandb.run.log(data={"train_loss": train_loss,}, step=trainer.iter_num)
+        val_loss = trainer.validate().item()
+        print(f"iter_dt {trainer.iter_dt * 1000:.2f}ms; iter {trainer.iter_num}: train loss {train_loss:.5f} val loss {val_loss:.5f}")
+        wandb.run.log(data={"train_loss": train_loss, "val_loss": val_loss,}, step=trainer.iter_num)
+
+
+def eval_callback(trainer):
+        val_loss = trainer.val_loss.item()
+        print(f"iter_dt {trainer.iter_dt * 1000:.2f}ms; iter {trainer.iter_num}: val loss {val_loss:.5f}")
+        wandb.run.log(data={"val_loss": val_loss,}, step=trainer.iter_num)
 
 
 def main(config):
